@@ -404,6 +404,7 @@
 /bundles/org.openhab.binding.x/ @computergeek1507
 /bundles/org.openhab.binding.xmltv/ @clinique
 /bundles/org.openhab.binding.xmppclient/ @pavel-gololobov
+/bundles/org.openhab.binding.xsense/ @smurferl
 /bundles/org.openhab.binding.yamahamusiccast/ @coop-git
 /bundles/org.openhab.binding.yamahareceiver/ @zarusz
 /bundles/org.openhab.binding.yeelight/ @claell
