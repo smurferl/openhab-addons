@@ -10,14 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal;
+package org.openhab.binding.xsense.internal.factory;
 
-import static org.openhab.binding.xsense.internal.XSenseBindingConstants.*;
+import static org.openhab.binding.xsense.internal.XSenseBindingConstants.THING_TYPE_BRIDGE;
+import static org.openhab.binding.xsense.internal.XSenseBindingConstants.THING_TYPE_SBS50;
+import static org.openhab.binding.xsense.internal.XSenseBindingConstants.THING_TYPE_XS01M;
 
 import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.xsense.internal.handler.XSenseBridgeHandler;
+import org.openhab.binding.xsense.internal.handler.XSenseSensorHandler;
+import org.openhab.binding.xsense.internal.handler.XSenseStationHandler;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
@@ -35,7 +41,8 @@ import org.osgi.service.component.annotations.Component;
 @Component(configurationPid = "binding.xsense", service = ThingHandlerFactory.class)
 public class XSenseHandlerFactory extends BaseThingHandlerFactory {
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_SAMPLE);
+    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_BRIDGE, THING_TYPE_XS01M,
+            THING_TYPE_SBS50);
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -46,8 +53,12 @@ public class XSenseHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
-        if (THING_TYPE_SAMPLE.equals(thingTypeUID)) {
-            return new XSenseHandler(thing);
+        if (THING_TYPE_BRIDGE.equals(thingTypeUID)) {
+            return new XSenseBridgeHandler((Bridge) thing);
+        } else if (THING_TYPE_XS01M.equals(thingTypeUID)) {
+            return new XSenseSensorHandler(thing);
+        } else if (THING_TYPE_SBS50.equals(thingTypeUID)) {
+            return new XSenseStationHandler(thing);
         }
 
         return null;

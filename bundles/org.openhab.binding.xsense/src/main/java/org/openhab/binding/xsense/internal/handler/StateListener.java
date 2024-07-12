@@ -10,22 +10,24 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal;
+package org.openhab.binding.xsense.internal.handler;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.xsense.internal.api.data.Device;
 
 /**
- * The {@link XSenseConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link StateListener} is notified when a xsense sensor state has changed or a sensor has been removed or added.
+ * sent to one of the channels.
  *
  * @author Jakob Fellner - Initial contribution
  */
 @NonNullByDefault
-public class XSenseConfiguration {
+public interface StateListener {
+    void onStateListenerAdded();
 
-    /**
-     * Sample configuration parameters. Replace with your own.
-     */
-    public String hostname = "";
-    public String password = "";
-    public int refreshInterval = 600;
+    void onStateListenerRemoved();
+
+    void onUpdateDevice(Device device);
+
+    String getDeviceSerialnumber();
 }
