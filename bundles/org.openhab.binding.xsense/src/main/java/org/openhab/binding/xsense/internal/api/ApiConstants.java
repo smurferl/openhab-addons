@@ -54,8 +54,9 @@ public final class ApiConstants {
     }
 
     public enum SubscriptionTopics {
-        SELFTEST("$aws/things/{}/shadow/name/2nd_selftestup/update/accepted"),
-        ALARM("$aws/things/{}/shadow/name/2nd_safealarm/update/accepted");
+        SELFTEST("$aws/things/{}/shadow/name/2nd_selftestup/update"),
+        ALARM("$aws/things/{}/shadow/name/2nd_safealarm/update"),
+        MUTE("$aws/things/{}/shadow/name/2nd_muteup/update");
 
         private final String topic;
 

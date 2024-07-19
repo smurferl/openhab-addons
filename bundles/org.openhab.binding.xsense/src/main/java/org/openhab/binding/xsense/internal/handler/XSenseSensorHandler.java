@@ -21,8 +21,10 @@ import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.xsense.internal.api.ApiConstants.SubscriptionTopics;
+import org.openhab.binding.xsense.internal.api.data.Alarm;
 import org.openhab.binding.xsense.internal.api.data.BaseSubscriptionDeviceData;
 import org.openhab.binding.xsense.internal.api.data.Device;
+import org.openhab.binding.xsense.internal.api.data.Mute;
 import org.openhab.binding.xsense.internal.api.data.SelfTestResult;
 import org.openhab.binding.xsense.internal.api.data.Sensor;
 import org.openhab.core.library.types.DecimalType;
@@ -58,8 +60,6 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
             if (bridgeHandler != null) {
                 String sensorSerialnumber = getThing().getProperties().get("serialnumber");
                 String stationSerialnumber = getThing().getProperties().get("station_serialnumber");
-                String stationType = getThing().getProperties().get("station_type");
-                String userId = getThing().getProperties().get("station_type");
 
                 sensorSerialnumber = sensorSerialnumber == null ? "" : sensorSerialnumber;
                 stationSerialnumber = stationSerialnumber == null ? "" : stationSerialnumber;
@@ -67,6 +67,10 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
                 if (CHANNEL_COMMAND.equals(channelUID.getId())) {
                     if (command.equals("TEST")) {
                         bridgeHandler.doSelfTest(stationSerialnumber, sensorSerialnumber);
+                    } else if (command.equals("MUTE")) {
+                        bridgeHandler.muteSensor(stationSerialnumber, sensorSerialnumber);
+                    } else {
+                        logger.info("invalid sensor command {}", command);
                     }
                 }
             }
@@ -87,6 +91,8 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
 
                     bridgeHandler.registerStateListener(this);
                     bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.SELFTEST, this);
+                    bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.ALARM, this);
+                    bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.MUTE, this);
                 }
             }
         });
@@ -115,6 +121,8 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
 
                     bridgeHandler.registerStateListener(this);
                     bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.SELFTEST, this);
+                    bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.ALARM, this);
+                    bridgeHandler.registerThingUpdateListener(thingName, SubscriptionTopics.MUTE, this);
                 } else {
                     bridgeHandler.unregisterStateListener(this);
                     bridgeHandler.unregisterThingUpdateListener(this);
@@ -163,9 +171,19 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
         if (data instanceof SelfTestResult) {
             SelfTestResult selfTestResult = (SelfTestResult) data;
 
-            triggerChannel(CHANNEL_CONDITION, selfTestResult.success ? "OK" : "FAILED");
-            logger.debug("selftest result for {} {}: {}", selfTestResult.stationSerialnumber,
+            triggerChannel(CHANNEL_CONDITION, selfTestResult.success ? "SELFTEST_OK" : "SELFTEST_FAILED");
+            logger.info("selftest result for {} {}: {}", selfTestResult.stationSerialnumber,
                     selfTestResult.deviceSerialnumber, selfTestResult.success);
+        } else if (data instanceof Alarm) {
+            Alarm alarm = (Alarm) data;
+
+            triggerChannel(CHANNEL_CONDITION, alarm.isAlarm ? "ALARM_ON" : "ALARM_OFF");
+            logger.info("alarm for {} {}: {}", alarm.stationSerialnumber, alarm.deviceSerialnumber, alarm.isAlarm);
+        } else if (data instanceof Mute) {
+            Mute mute = (Mute) data;
+
+            triggerChannel(CHANNEL_CONDITION, "MUTED");
+            logger.info("muted for {} {}: {}", mute.stationSerialnumber, mute.deviceSerialnumber, mute.trigger);
         } else {
             logger.warn("unknown subscriptiondata type received {}", data.getClass().toString());
         }

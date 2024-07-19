@@ -13,20 +13,20 @@
 package org.openhab.binding.xsense.internal.api.data;
 
 /**
- * The {@link SelfTestResult} represents a single selftest result of xsense smokedetector
+ * The {@link Mute} represents a single result of a specific xsense smokedetector alarm mute
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class SelfTestResult extends BaseSubscriptionDeviceData {
-    public boolean success = false;
+public class Mute extends BaseSubscriptionDeviceData {
+    public String trigger = "";
 
-    public SelfTestResult(String stationSerialnumber, String sensorSerialnumber, boolean success) {
+    public Mute(String stationSerialnumber, String sensorSerialnumber, String trigger) {
         super(stationSerialnumber, sensorSerialnumber);
-        this.success = success;
+        this.trigger = trigger;
     }
 
-    public SelfTestResult(String sensorSerialnumber, boolean success) {
+    public Mute(String sensorSerialnumber, String trigger) {
         super(sensorSerialnumber);
-        this.success = success;
+        this.trigger = trigger;
     }
 }

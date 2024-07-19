@@ -230,7 +230,42 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
                 }
 
                 if (sensor != null && station != null) {
-                    api.doSelfTest(sensor.houseId, station, sensor);
+                    api.doSelfTest(station, sensor);
+                } else {
+                    logger.warn("sensor or station not found for selftest");
+                }
+            } else {
+                logger.error("api not initialized");
+            }
+        });
+    }
+
+    public void muteSensor(String stationSerialnumber, String sensorSerialnumber) {
+        scheduler.execute(() -> {
+            if (api != null) {
+                List<Device> devices = getFullDevices();
+                Station station = null;
+                Sensor sensor = null;
+
+                for (Device device : devices) {
+                    if (device instanceof Station) {
+                        if (device.deviceSerialnumber.equals(stationSerialnumber)) {
+                            station = (Station) device;
+                        }
+                    }
+
+                    if (device instanceof Sensor) {
+                        Sensor s = (Sensor) device;
+
+                        if (s.deviceSerialnumber.equals(sensorSerialnumber)
+                                && s.stationSerialnumber.equals(stationSerialnumber)) {
+                            sensor = s;
+                        }
+                    }
+                }
+
+                if (sensor != null && station != null) {
+                    api.muteSensor(station, sensor);
                 } else {
                     logger.warn("sensor or station not found for selftest");
                 }

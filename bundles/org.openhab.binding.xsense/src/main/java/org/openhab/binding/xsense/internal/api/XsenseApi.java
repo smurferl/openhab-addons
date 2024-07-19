@@ -34,6 +34,7 @@ import org.openhab.binding.xsense.internal.api.communication.requests.ClientInfo
 import org.openhab.binding.xsense.internal.api.communication.requests.DevicesRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.DevicesStatusRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.HousesRequest;
+import org.openhab.binding.xsense.internal.api.communication.requests.MuteRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.OAuthRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.RoomsRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.SelfTestRequest;
@@ -307,8 +308,14 @@ public class XsenseApi {
         return response.getReturnCode() == 200;
     }
 
-    public boolean doSelfTest(String houseId, Station station, Sensor sensor) {
-        BaseResponse response = sendRequest(new SelfTestRequest(houseId, station, sensor), BaseData.class);
+    public boolean doSelfTest(Station station, Sensor sensor) {
+        BaseResponse response = sendRequest(new SelfTestRequest(station, sensor), BaseData.class);
+
+        return response.getReturnCode() == 200;
+    }
+
+    public boolean muteSensor(Station station, Sensor sensor) {
+        BaseResponse response = sendRequest(new MuteRequest(station, sensor), BaseData.class);
 
         return response.getReturnCode() == 200;
     }

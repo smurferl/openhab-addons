@@ -64,8 +64,11 @@
 		<label>Sensor Condition</label>
 		<event>
 			<options>
-				<option value="OK">good condition</option>
-				<option value="FAILED">bad condition</option>
+				<option value="SELFTEST_OK">good condition</option>
+				<option value="SELFTEST_FAILED">bad condition</option>
+				<option value="ALARM_ON">alarm on</option>
+				<option value="ALARM_OFF">alarm off</option>
+				<option value="MUTED">muted</option>
 			</options>
 		</event>
 	</channel-type>

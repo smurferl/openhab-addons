@@ -27,23 +27,23 @@ import software.amazon.awssdk.iot.iotshadow.model.UpdateNamedShadowRequest;
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class SelfTestRequest extends BaseMqttRequest<UpdateNamedShadowRequest> {
+public class MuteRequest extends BaseMqttRequest<UpdateNamedShadowRequest> {
     UpdateNamedShadowRequest getNamedShadowRequest;
 
-    public SelfTestRequest(Station station, Sensor sensor) {
+    public MuteRequest(Station station, Sensor sensor) {
         super(sensor.houseId, ShadowRequestType.UPDATE);
 
         ShadowState shadowState = new ShadowState();
         shadowState.desired = new HashMap<String, Object>();
-        shadowState.desired.put("shadow", "appSelfTest");
+        shadowState.desired.put("shadow", "appMute");
         shadowState.desired.put("deviceSN", sensor.deviceSerialnumber);
         shadowState.desired.put("stationSN", station.deviceSerialnumber);
-        shadowState.desired.put("time", System.currentTimeMillis());
         shadowState.desired.put("userId", station.userId);
+        shadowState.desired.put("muteType", "0");
 
         shadowRequest = new UpdateNamedShadowRequest();
         shadowRequest.thingName = station.deviceType.toString() + station.deviceSerialnumber;
-        shadowRequest.shadowName = "2nd_selftest_" + sensor.deviceSerialnumber;
+        shadowRequest.shadowName = "2nd_appmute";
         shadowRequest.state = shadowState;
         shadowRequest.clientToken = token;
     }

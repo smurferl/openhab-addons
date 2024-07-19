@@ -26,8 +26,10 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONObject;
 import org.openhab.binding.xsense.internal.api.ApiConstants;
 import org.openhab.binding.xsense.internal.api.ApiConstants.ShadowRequestType;
+import org.openhab.binding.xsense.internal.api.data.Alarms;
 import org.openhab.binding.xsense.internal.api.data.BaseSubscriptionData;
 import org.openhab.binding.xsense.internal.api.data.BaseSubscriptionDeviceData;
+import org.openhab.binding.xsense.internal.api.data.Mutes;
 import org.openhab.binding.xsense.internal.api.data.SelfTestResults;
 import org.openhab.binding.xsense.internal.handler.ThingUpdateListener;
 import org.openhab.binding.xsense.internal.handler.XSenseSensorHandler;
@@ -525,6 +527,12 @@ public class Mqtt implements MqttClientConnectionEvents {
 
             if (message.getTopic().contains(ApiConstants.SubscriptionTopics.SELFTEST.getShadowName())) {
                 subscriptionData = new SelfTestResults();
+                subscriptionData.deserialize(new String(message.getPayload(), StandardCharsets.UTF_8));
+            } else if (message.getTopic().contains(ApiConstants.SubscriptionTopics.ALARM.getShadowName())) {
+                subscriptionData = new Alarms();
+                subscriptionData.deserialize(new String(message.getPayload(), StandardCharsets.UTF_8));
+            } else if (message.getTopic().contains(ApiConstants.SubscriptionTopics.MUTE.getShadowName())) {
+                subscriptionData = new Mutes();
                 subscriptionData.deserialize(new String(message.getPayload(), StandardCharsets.UTF_8));
             } else {
                 logger.info("unknown mqtt subscription message: {}",
