@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.api.communication.utils;
+package org.openhab.binding.xsense.internal.api.communication;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +32,9 @@ import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.AnonymousAWSCredentials;
 import com.amazonaws.regions.Regions;
@@ -47,14 +50,13 @@ import com.amazonaws.services.cognitoidp.model.RespondToAuthChallengeResult;
 import com.amazonaws.util.Base64;
 import com.amazonaws.util.StringUtils;
 
-import software.amazon.awssdk.crt.mqtt.MqttClientConnection;
-
 /**
  * The {@link Authentication} Authentication Helper for Amazon Cognito
  *
  * @author Jakob Fellner - Initial contribution
  */
 public class Authentication {
+    private final Logger logger = LoggerFactory.getLogger(Authentication.class);
     private static final String HEX_N = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
             + "29024E088A67CC74020BBEA63B139B22514A08798E3404DD" + "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
             + "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED" + "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"
@@ -103,8 +105,6 @@ public class Authentication {
     private String secretKey;
     private String region;
 
-    private MqttClientConnection connection;
-
     public Authentication(String region, String userPoolID, String clientid, String secretKey) {
         do {
             a = new BigInteger(EPHEMERAL_KEY_LENGTH, SECURE_RANDOM).mod(N);
@@ -115,7 +115,6 @@ public class Authentication {
         this.clientId = clientid;
         this.region = region;
         this.secretKey = secretKey;
-        this.connection = null;
     }
 
     private BigInteger getA() {
@@ -185,9 +184,8 @@ public class Authentication {
                 authResult.put("refreshToken", result.getRefreshToken());
                 authResult.put("exiresIn", Integer.toString(result.getExpiresIn()));
             }
-        } catch (final Exception ex) {
-            System.out.println("Exception" + ex);
-
+        } catch (final Exception e) {
+            logger.error("failed to authenticate", e);
         }
 
         return authResult;
@@ -204,7 +202,7 @@ public class Authentication {
             try {
                 initiateAuthRequest.addAuthParametersEntry("SECRET_HASH", secretKey);
             } catch (Exception e) {
-                System.out.println(e.getMessage());
+                logger.error("failed to refresh authentication", e);
             }
         }
         initiateAuthRequest.addAuthParametersEntry("REFRESH_TOKEN", refreshToken);
@@ -241,7 +239,7 @@ public class Authentication {
                 String hash = calculateSecretHash(username, clientId, secretKey);
                 initiateAuthRequest.addAuthParametersEntry("SECRET_HASH", hash);
             } catch (Exception e) {
-                System.out.println(e.getMessage());
+                logger.error("failed initiate auth request", e);
             }
         }
         initiateAuthRequest.addAuthParametersEntry("USERNAME", username);
@@ -285,7 +283,7 @@ public class Authentication {
             byte[] dateBytes = dateString.getBytes(StringUtils.UTF8);
             hmac = mac.doFinal(dateBytes);
         } catch (Exception e) {
-            System.out.println(e);
+            logger.error("failed to encode authentication signature", e);
         }
 
         SimpleDateFormat formatTimestamp = new SimpleDateFormat("EEE MMM d HH:mm:ss z yyyy", Locale.US);
@@ -330,13 +328,6 @@ public class Authentication {
         } catch (Exception e) {
             throw new RuntimeException("Error while calculating ");
         }
-    }
-
-    static byte[] HmacSHA256(byte[] data, byte[] key) throws Exception {
-        String algorithm = "HmacSHA256";
-        Mac mac = Mac.getInstance(algorithm);
-        mac.init(new SecretKeySpec(key, algorithm));
-        return mac.doFinal(data);
     }
 
     /**

@@ -49,13 +49,6 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
             if (command instanceof RefreshType) {
                 // TODO: handle data refresh
             }
-
-            // TODO: handle command
-
-            // Note: if communication with thing fails for some reason,
-            // indicate that by setting the status with detail information:
-            // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-            // "Could not control device at IP address x.x.x.x");
         }
     }
 
@@ -63,18 +56,16 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
     public void initialize() {
         updateStatus(ThingStatus.UNKNOWN);
 
-        /*
-         * scheduler.execute(() -> {
-         * // thing will get online after devicepolling starts
-         * Bridge bridge = getBridge();
-         * if (bridge != null) {
-         * XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
-         * if (bridgeHandler != null) {
-         * bridgeHandler.registerStateListener(this);
-         * }
-         * }
-         * });
-         */
+        scheduler.execute(() -> {
+            // thing will get online after devicepolling starts
+            Bridge bridge = getBridge();
+            if (bridge != null) {
+                XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
+                if (bridgeHandler != null) {
+                    bridgeHandler.registerStateListener(this);
+                }
+            }
+        });
     }
 
     @Override

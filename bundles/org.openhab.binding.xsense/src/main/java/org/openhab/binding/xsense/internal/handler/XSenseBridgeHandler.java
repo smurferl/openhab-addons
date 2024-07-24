@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -57,6 +59,7 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
     private @Nullable ScheduledFuture<?> statePollingJob;
     private @Nullable XsenseApi api = null;
     private @Nullable XSenseDiscoveryService discoveryService;
+    private final Lock lock = new ReentrantLock(true);
 
     public XSenseBridgeHandler(Bridge bridge) {
         super(bridge);
@@ -82,15 +85,18 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
     }
 
     private void stopStatePolling() {
+        lock.lock();
         if (statePollingJob != null) {
             statePollingJob.cancel(true);
         }
         statePollingJob = null;
+        lock.unlock();
     }
 
     private final Runnable statePollingRunnable = new PollingRunnable() {
         @Override
         protected void doConnectedRun() {
+            lock.lock();
             List<Device> devices = getFullDevices();
 
             if (discoveryService != null) {
@@ -105,6 +111,7 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
                     listener.onUpdateDevice(device);
                 }
             });
+            lock.unlock();
         }
     };
 
@@ -137,7 +144,6 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
             boolean thingReachable = false;
 
             try {
-                // api.login("jakob.fellner@gmail.com", "u@rDbc$$p#w$699pv4rM");
                 if (api != null) {
                     api.login();
                     thingReachable = true;
@@ -180,7 +186,6 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
         if (api != null) {
             api.logout();
         }
-        updateStatus(ThingStatus.OFFLINE);
     }
 
     public List<Device> getFullDevices() {
@@ -322,7 +327,9 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
     public boolean registerThingUpdateListener(String thingName, SubscriptionTopics topic,
             ThingUpdateListener listener) {
         if (thing.getStatus() == ThingStatus.ONLINE) {
-            return api.registerThingUpdateListner(thingName, topic, listener);
+            if (api != null) {
+                return api.registerThingUpdateListener(thingName, topic, listener);
+            }
         }
 
         return false;

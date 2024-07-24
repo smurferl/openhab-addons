@@ -17,6 +17,8 @@ import java.lang.reflect.InvocationTargetException;
 import org.eclipse.jdt.annotation.Nullable;
 import org.json.JSONObject;
 import org.openhab.binding.xsense.internal.api.data.BaseData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link BaseResponse} minimum representation for responses received via mqtt or http rest interface
@@ -24,6 +26,7 @@ import org.openhab.binding.xsense.internal.api.data.BaseData;
  * @author Jakob Fellner - Initial contribution
  */
 public class BaseResponse {
+    private final Logger logger = LoggerFactory.getLogger(BaseResponse.class);
     private int returnCode;
     private String returnMessage;
     private @Nullable BaseData data = null;
@@ -47,7 +50,7 @@ public class BaseResponse {
                 data.deserialize(input);
             }
         } else {
-            System.out.println("error " + returnCode + "in response: " + returnMessage);
+            logger.error("error {} in response: {}", returnCode, returnMessage);
         }
     }
 

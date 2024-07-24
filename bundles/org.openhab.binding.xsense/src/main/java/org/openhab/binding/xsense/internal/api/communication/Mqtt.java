@@ -33,6 +33,7 @@ import org.openhab.binding.xsense.internal.api.data.Mutes;
 import org.openhab.binding.xsense.internal.api.data.SelfTestResults;
 import org.openhab.binding.xsense.internal.handler.ThingUpdateListener;
 import org.openhab.binding.xsense.internal.handler.XSenseSensorHandler;
+import org.openhab.core.thing.binding.BaseThingHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -275,7 +276,7 @@ public class Mqtt implements MqttClientConnectionEvents {
         }
     }
 
-    public boolean registerThingUpdateListner(String topic, ThingUpdateListener listener) {
+    public boolean registerThingUpdateListener(String topic, ThingUpdateListener listener) {
         if (subscribe(topic)) {
             ArrayList<ThingUpdateListener> listeners = null;
             if (updateListeners.containsKey(topic)) {
@@ -287,7 +288,8 @@ public class Mqtt implements MqttClientConnectionEvents {
             listeners.add(listener);
             updateListeners.put(topic, listeners);
 
-            logger.debug("registered listener {} for topic {}", listener.toString(), topic);
+            logger.debug("registered listener {} for topic {}", ((BaseThingHandler) listener).getThing().getLabel(),
+                    topic);
 
             return true;
         }
@@ -306,7 +308,8 @@ public class Mqtt implements MqttClientConnectionEvents {
                     updateListeners.put(topic, listeners);
                 }
 
-                logger.info("unregistered listener {} for topic {}", listener.toString(), topic);
+                logger.debug("unregistered listener {} for topic {}",
+                        ((BaseThingHandler) listener).getThing().getLabel(), topic);
             }
         });
 

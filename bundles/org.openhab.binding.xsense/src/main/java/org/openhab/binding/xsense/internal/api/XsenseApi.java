@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.openhab.binding.xsense.internal.api.ApiConstants.RequestType;
 import org.openhab.binding.xsense.internal.api.ApiConstants.SubscriptionTopics;
+import org.openhab.binding.xsense.internal.api.communication.Authentication;
 import org.openhab.binding.xsense.internal.api.communication.BaseHttpRequest;
 import org.openhab.binding.xsense.internal.api.communication.BaseMqttRequest;
 import org.openhab.binding.xsense.internal.api.communication.BaseRequest;
@@ -39,7 +40,6 @@ import org.openhab.binding.xsense.internal.api.communication.requests.OAuthReque
 import org.openhab.binding.xsense.internal.api.communication.requests.RoomsRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.SelfTestRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.VoicePromptRequest;
-import org.openhab.binding.xsense.internal.api.communication.utils.Authentication;
 import org.openhab.binding.xsense.internal.api.data.BaseData;
 import org.openhab.binding.xsense.internal.api.data.ClientInfo;
 import org.openhab.binding.xsense.internal.api.data.Device;
@@ -236,12 +236,12 @@ public class XsenseApi {
     }
 
     public void logout() {
+        // disconnect mqtt clients and clean them up
         mqttClients.values().forEach(item -> {
             Mqtt mqttClient = (Mqtt) item;
             mqttClient.disconnect(true);
         });
-
-        // TODO send logout request
+        mqttClients.clear();
     }
 
     public Houses getHouses() throws Exception {
@@ -320,11 +320,11 @@ public class XsenseApi {
         return response.getReturnCode() == 200;
     }
 
-    public boolean registerThingUpdateListner(String thing, SubscriptionTopics topic, ThingUpdateListener listener) {
+    public boolean registerThingUpdateListener(String thing, SubscriptionTopics topic, ThingUpdateListener listener) {
         String t = topic.toString().replace("{}", thing);
 
         for (Mqtt mqtt : mqttClients.values()) {
-            if (!mqtt.registerThingUpdateListner(t, listener)) {
+            if (!mqtt.registerThingUpdateListener(t, listener)) {
                 return false;
             }
         }
