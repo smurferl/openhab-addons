@@ -40,17 +40,21 @@ public class BaseResponse {
             }
         }
 
-        JSONObject obj = new JSONObject(input);
+        if (!input.isEmpty()) {
+            JSONObject obj = new JSONObject(input);
 
-        returnCode = obj.has("reCode") ? obj.getInt("reCode") : 500;
-        returnMessage = obj.has("reMsg") ? obj.getString("reMsg") : "invalid message structure: " + input;
+            returnCode = obj.has("reCode") ? obj.getInt("reCode") : 500;
+            returnMessage = obj.has("reMsg") ? obj.getString("reMsg") : "invalid message structure: " + input;
 
-        if (returnCode == 200 && returnMessage.equals("success !")) {
-            if (data != null) {
-                data.deserialize(input);
+            if (returnCode == 200 && returnMessage.equals("success !")) {
+                if (data != null) {
+                    data.deserialize(input);
+                }
+            } else {
+                logger.error("error {} in response: {}", returnCode, returnMessage);
             }
         } else {
-            logger.error("error {} in response: {}", returnCode, returnMessage);
+            logger.warn("empty response");
         }
     }
 

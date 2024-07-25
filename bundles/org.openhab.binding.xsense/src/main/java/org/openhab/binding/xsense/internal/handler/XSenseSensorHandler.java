@@ -13,13 +13,13 @@
 package org.openhab.binding.xsense.internal.handler;
 
 import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_BATTERY_LEVEL;
-import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_COMMAND;
 import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_CONDITION;
 import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_SIGNAL_STRENGTH;
 
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.xsense.internal.XSenseBindingConstants;
 import org.openhab.binding.xsense.internal.api.ApiConstants.SubscriptionTopics;
 import org.openhab.binding.xsense.internal.api.data.Alarm;
 import org.openhab.binding.xsense.internal.api.data.BaseSubscriptionDeviceData;
@@ -64,13 +64,11 @@ public class XSenseSensorHandler extends BaseThingHandler implements StateListen
                 sensorSerialnumber = sensorSerialnumber == null ? "" : sensorSerialnumber;
                 stationSerialnumber = stationSerialnumber == null ? "" : stationSerialnumber;
 
-                if (CHANNEL_COMMAND.equals(channelUID.getId())) {
+                if (XSenseBindingConstants.CHANNEL_VOICEVOLUME.equals(channelUID.getId())) {
                     if (command.equals("TEST")) {
                         bridgeHandler.doSelfTest(stationSerialnumber, sensorSerialnumber);
                     } else if (command.equals("MUTE")) {
                         bridgeHandler.muteSensor(stationSerialnumber, sensorSerialnumber);
-                    } else {
-                        logger.info("invalid sensor command {}", command);
                     }
                 }
             }

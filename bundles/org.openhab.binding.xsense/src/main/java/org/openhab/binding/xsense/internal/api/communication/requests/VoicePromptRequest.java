@@ -29,14 +29,14 @@ import software.amazon.awssdk.iot.iotshadow.model.UpdateNamedShadowRequest;
 public class VoicePromptRequest extends BaseMqttRequest<UpdateNamedShadowRequest> {
     UpdateNamedShadowRequest getNamedShadowRequest;
 
-    public VoicePromptRequest(String houseId, Device station, boolean enabled) {
-        super(houseId, ShadowRequestType.UPDATE);
+    public VoicePromptRequest(Device station, int volume) {
+        super(station.houseId, ShadowRequestType.UPDATE);
 
         ShadowState shadowState = new ShadowState();
         shadowState.desired = new HashMap<String, Object>();
         shadowState.desired.put("shadow", "infoBase");
         shadowState.desired.put("stationSN", station.deviceSerialnumber);
-        shadowState.desired.put("voiceVol", enabled ? "75" : "0");
+        shadowState.desired.put("voiceVol", Integer.toString(volume));
 
         shadowRequest = new UpdateNamedShadowRequest();
         shadowRequest.thingName = station.deviceType.toString() + station.deviceSerialnumber;

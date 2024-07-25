@@ -272,6 +272,31 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
                 if (sensor != null && station != null) {
                     api.muteSensor(station, sensor);
                 } else {
+                    logger.warn("sensor or station not found for muting alarm");
+                }
+            } else {
+                logger.error("api not initialized");
+            }
+        });
+    }
+
+    public void setVoicePromptVolume(String stationSerialnumber, int volume) {
+        scheduler.execute(() -> {
+            if (api != null) {
+                List<Device> devices = getFullDevices();
+                Station station = null;
+
+                for (Device device : devices) {
+                    if (device instanceof Station) {
+                        if (device.deviceSerialnumber.equals(stationSerialnumber)) {
+                            station = (Station) device;
+                        }
+                    }
+                }
+
+                if (station != null) {
+                    api.setVoicePromptVolume(station, volume);
+                } else {
                     logger.warn("sensor or station not found for selftest");
                 }
             } else {
@@ -287,7 +312,7 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
             stateListener.onStateListenerAdded();
 
             if (thing.getStatus() == ThingStatus.ONLINE) {
-                statePollingJob = (ScheduledFuture<?>) scheduler.schedule(statePollingRunnable, 0, TimeUnit.SECONDS);
+                scheduler.schedule(statePollingRunnable, 0, TimeUnit.SECONDS);
             }
 
             return true;

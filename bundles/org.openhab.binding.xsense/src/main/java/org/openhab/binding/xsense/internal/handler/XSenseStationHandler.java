@@ -15,6 +15,7 @@ package org.openhab.binding.xsense.internal.handler;
 import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_SIGNAL_STRENGTH;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.xsense.internal.XSenseBindingConstants;
 import org.openhab.binding.xsense.internal.api.data.Device;
 import org.openhab.binding.xsense.internal.api.data.Station;
 import org.openhab.core.library.types.DecimalType;
@@ -25,7 +26,6 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
-import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,9 +45,17 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (CHANNEL_SIGNAL_STRENGTH.equals(channelUID.getId())) {
-            if (command instanceof RefreshType) {
-                // TODO: handle data refresh
+        Bridge bridge = getBridge();
+        if (bridge != null) {
+            XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
+            if (bridgeHandler != null) {
+                String stationSerialnumber = getThing().getProperties().get("serialnumber");
+
+                stationSerialnumber = stationSerialnumber == null ? "" : stationSerialnumber;
+
+                if (XSenseBindingConstants.CHANNEL_VOICEVOLUME.equals(channelUID.getId())) {
+                    bridgeHandler.setVoicePromptVolume(stationSerialnumber, ((DecimalType) command).intValue());
+                }
             }
         }
     }

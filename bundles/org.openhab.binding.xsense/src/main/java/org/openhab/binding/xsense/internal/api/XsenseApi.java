@@ -302,8 +302,8 @@ public class XsenseApi {
         return devices;
     }
 
-    public boolean setVoicePromptEnabled(String houseId, Device station, boolean enabled) {
-        BaseResponse response = sendRequest(new VoicePromptRequest(houseId, station, enabled), BaseData.class);
+    public boolean setVoicePromptVolume(Device station, int volume) {
+        BaseResponse response = sendRequest(new VoicePromptRequest(station, volume), BaseData.class);
 
         return response.getReturnCode() == 200;
     }

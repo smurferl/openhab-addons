@@ -36,4 +36,5 @@ public class XSenseBindingConstants {
     public static final String CHANNEL_SIGNAL_STRENGTH = "signal-strength";
     public static final String CHANNEL_COMMAND = "command";
     public static final String CHANNEL_CONDITION = "condition";
+    public static final String CHANNEL_VOICEVOLUME = "voice-volume";
 }
