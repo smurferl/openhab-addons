@@ -13,6 +13,7 @@
 package org.openhab.binding.xsense.internal.api.data;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 
 /**
  * The {@link OAuth} represents all data relevant, received by the oauth request. contained information is needed for

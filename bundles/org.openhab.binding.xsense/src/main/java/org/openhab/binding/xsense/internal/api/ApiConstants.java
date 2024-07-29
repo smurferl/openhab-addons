@@ -12,6 +12,11 @@
  */
 package org.openhab.binding.xsense.internal.api;
 
+import org.openhab.binding.xsense.internal.api.data.events.Alarms;
+import org.openhab.binding.xsense.internal.api.data.events.ForceLogout;
+import org.openhab.binding.xsense.internal.api.data.events.Mutes;
+import org.openhab.binding.xsense.internal.api.data.events.SelfTestResults;
+
 /**
  * The {@link ApiConstants} class defines common constants uses for the xsense api
  *
@@ -53,15 +58,24 @@ public final class ApiConstants {
         MQTT
     }
 
+    public enum EventType {
+        AWS,
+        CLAYBOX,
+        XSENSE;
+    }
+
     public enum SubscriptionTopics {
-        SELFTEST("$aws/things/{}/shadow/name/2nd_selftestup/update"),
-        ALARM("$aws/things/{}/shadow/name/2nd_safealarm/update"),
-        MUTE("$aws/things/{}/shadow/name/2nd_muteup/update");
+        SELFTEST("$aws/things/{thing}/shadow/name/2nd_selftestup/update", SelfTestResults.class),
+        ALARM("$aws/things/{thing}/shadow/name/2nd_safealarm/update", Alarms.class),
+        MUTE("$aws/things/{thing}/shadow/name/2nd_muteup/update", Mutes.class),
+        LOGIN("@claybox/events/apptoken/{userId}", ForceLogout.class);
 
         private final String topic;
+        private final Class<?> dataClass;
 
-        private SubscriptionTopics(String t) {
+        private SubscriptionTopics(String t, Class<?> d) {
             topic = t;
+            dataClass = d;
         }
 
         public boolean equalsType(String otherTopic) {
@@ -72,13 +86,8 @@ public final class ApiConstants {
             return this.topic;
         }
 
-        public String getShadowName() {
-            String[] parts = topic.split("/");
-            if (parts.length >= 6) {
-                return parts[5];
-            }
-
-            return "";
+        public Class<?> getDataClass() {
+            return dataClass;
         }
     }
 }

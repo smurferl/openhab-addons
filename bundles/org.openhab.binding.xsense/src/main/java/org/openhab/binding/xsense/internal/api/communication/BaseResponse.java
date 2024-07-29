@@ -16,7 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 
 import org.eclipse.jdt.annotation.Nullable;
 import org.json.JSONObject;
-import org.openhab.binding.xsense.internal.api.data.BaseData;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

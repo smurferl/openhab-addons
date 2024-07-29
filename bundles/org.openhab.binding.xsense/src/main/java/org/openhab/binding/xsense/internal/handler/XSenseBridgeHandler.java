@@ -12,8 +12,6 @@
  */
 package org.openhab.binding.xsense.internal.handler;
 
-import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL_BATTERY_LEVEL;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -28,20 +26,23 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.xsense.internal.api.ApiConstants.SubscriptionTopics;
+import org.openhab.binding.xsense.internal.api.EventListener;
 import org.openhab.binding.xsense.internal.api.XsenseApi;
-import org.openhab.binding.xsense.internal.api.data.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Sensor;
+import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 import org.openhab.binding.xsense.internal.api.data.Houses;
-import org.openhab.binding.xsense.internal.api.data.Sensor;
-import org.openhab.binding.xsense.internal.api.data.Station;
+import org.openhab.binding.xsense.internal.api.data.base.BaseEvent;
+import org.openhab.binding.xsense.internal.api.data.events.ForceLogout.ForceLogoutEvent;
 import org.openhab.binding.xsense.internal.config.XSenseConfiguration;
 import org.openhab.binding.xsense.internal.discovery.XSenseDiscoveryService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
-import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,10 +53,10 @@ import org.slf4j.LoggerFactory;
  * @author Jakob Fellner - Initial contribution
  */
 @NonNullByDefault
-public class XSenseBridgeHandler extends BaseBridgeHandler {
+public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListener {
     private final Logger logger = LoggerFactory.getLogger(XSenseBridgeHandler.class);
     private @Nullable XSenseConfiguration config;
-    private final static Map<String, StateListener> stateListeners = new ConcurrentHashMap<>();
+    private final static Map<String, DeviceListener> deviceListeners = new ConcurrentHashMap<>();
     private @Nullable ScheduledFuture<?> statePollingJob;
     private @Nullable XsenseApi api = null;
     private @Nullable XSenseDiscoveryService discoveryService;
@@ -68,6 +69,13 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
         return Collections.singleton(XSenseDiscoveryService.class);
+    }
+
+    private void cleanup() {
+        deviceListeners.clear();
+        if (api != null) {
+            api.logout();
+        }
     }
 
     @SuppressWarnings("null")
@@ -99,36 +107,36 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
             lock.lock();
             List<Device> devices = getFullDevices();
 
-            if (discoveryService != null) {
-                devices.forEach(discoveryService::addDeviceDiscovery);
-            }
-
             devices.forEach(item -> {
-                Device device = (Device) item;
-                StateListener listener = stateListeners.get(device.deviceSerialnumber);
+                if (item instanceof Station) {
+                    Station station = (Station) item;
+                    sendDeviceToListener(station);
 
-                if (listener != null) {
-                    listener.onUpdateDevice(device);
+                    for (Sensor sensor : station.getSensors()) {
+                        sendDeviceToListener(sensor);
+                    }
+                } else {
+                    sendDeviceToListener(item);
                 }
             });
             lock.unlock();
         }
     };
 
+    private void sendDeviceToListener(Device device) {
+        DeviceListener listener = deviceListeners.get(device.getDeviceSerialnumber());
+
+        if (listener != null) {
+            listener.onUpdateDevice(device);
+        }
+
+        if (discoveryService != null) {
+            discoveryService.addDeviceDiscovery(device);
+        }
+    }
+
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (CHANNEL_BATTERY_LEVEL.equals(channelUID.getId())) {
-            if (command instanceof RefreshType) {
-                // TODO: handle data refresh
-            }
-
-            // TODO: handle command
-
-            // Note: if communication with thing fails for some reason,
-            // indicate that by setting the status with detail information:
-            // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-            // "Could not control device at IP address x.x.x.x");
-        }
     }
 
     @Override
@@ -142,50 +150,38 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
 
         scheduler.execute(() -> {
             boolean thingReachable = false;
+            String error = "";
 
-            try {
-                if (api != null) {
+            if (api != null) {
+                try {
                     api.login();
+                    api.registerThingUpdateListener("us-east-1", SubscriptionTopics.LOGIN, this);
                     thingReachable = true;
-                } else {
-                    logger.warn("api not initialized");
+                } catch (Exception e) {
+                    error = e.getMessage();
+                    logger.warn("failed to login: {}", error);
                 }
-
-            } catch (Exception e) {
-                logger.error("failed to login", e);
+            } else {
+                logger.warn("api not initialized");
             }
 
-            // when done do:
             if (thingReachable) {
                 updateStatus(ThingStatus.ONLINE);
                 startStatePolling();
             } else {
-                updateStatus(ThingStatus.OFFLINE);
+                if (error.isEmpty()) {
+                    updateStatus(ThingStatus.OFFLINE);
+                } else {
+                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, error);
+                }
             }
         });
-
-        // These logging types should be primarily used by bindings
-        // logger.trace("Example trace message");
-        // logger.debug("Example debug message");
-        // logger.warn("Example warn message");
-        //
-        // Logging to INFO should be avoided normally.
-        // See https://www.openhab.org/docs/developer/guidelines.html#f-logging
-
-        // Note: When initialization can NOT be done set the status with more details for further
-        // analysis. See also class ThingStatusDetail for all available status details.
-        // Add a description to give user information to understand why thing does not work as expected. E.g.
-        // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-        // "Can not access device as username and/or password are invalid");
     }
 
     @Override
     public void dispose() {
         stopStatePolling();
-        stateListeners.clear();
-        if (api != null) {
-            api.logout();
-        }
+        cleanup();
     }
 
     public List<Device> getFullDevices() {
@@ -193,9 +189,9 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
         if (api != null) {
             try {
                 Houses houses = api.getHouses();
-                houses.houses.values().forEach(item -> {
+                houses.getHouses().forEach(item -> {
                     try {
-                        ret.addAll(api.getDevices(item.houseId).toList());
+                        ret.addAll(api.getDevices(item.getHouseId()).toList());
                     } catch (Exception e) {
                         logger.warn("getDevices failed {}", e.getMessage(), e);
                     }
@@ -219,17 +215,9 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
 
                 for (Device device : devices) {
                     if (device instanceof Station) {
-                        if (device.deviceSerialnumber.equals(stationSerialnumber)) {
+                        if (device.getDeviceSerialnumber().equals(stationSerialnumber)) {
                             station = (Station) device;
-                        }
-                    }
-
-                    if (device instanceof Sensor) {
-                        Sensor s = (Sensor) device;
-
-                        if (s.deviceSerialnumber.equals(sensorSerialnumber)
-                                && s.stationSerialnumber.equals(stationSerialnumber)) {
-                            sensor = s;
+                            sensor = station.getSensor(sensorSerialnumber);
                         }
                     }
                 }
@@ -254,17 +242,9 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
 
                 for (Device device : devices) {
                     if (device instanceof Station) {
-                        if (device.deviceSerialnumber.equals(stationSerialnumber)) {
+                        if (device.getDeviceSerialnumber().equals(stationSerialnumber)) {
                             station = (Station) device;
-                        }
-                    }
-
-                    if (device instanceof Sensor) {
-                        Sensor s = (Sensor) device;
-
-                        if (s.deviceSerialnumber.equals(sensorSerialnumber)
-                                && s.stationSerialnumber.equals(stationSerialnumber)) {
-                            sensor = s;
+                            sensor = station.getSensor(sensorSerialnumber);
                         }
                     }
                 }
@@ -288,7 +268,7 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
 
                 for (Device device : devices) {
                     if (device instanceof Station) {
-                        if (device.deviceSerialnumber.equals(stationSerialnumber)) {
+                        if (device.getDeviceSerialnumber().equals(stationSerialnumber)) {
                             station = (Station) device;
                         }
                     }
@@ -305,11 +285,11 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
         });
     }
 
-    public boolean registerStateListener(StateListener stateListener) {
-        final String serialnumber = stateListener.getDeviceSerialnumber();
-        if (!stateListeners.containsKey(serialnumber)) {
-            stateListeners.put(serialnumber, stateListener);
-            stateListener.onStateListenerAdded();
+    public boolean registerDeviceListener(DeviceListener deviceListener) {
+        final String serialnumber = deviceListener.getDeviceSerialnumber();
+        if (!deviceListeners.containsKey(serialnumber)) {
+            deviceListeners.put(serialnumber, deviceListener);
+            deviceListener.onStateListenerAdded();
 
             if (thing.getStatus() == ThingStatus.ONLINE) {
                 scheduler.schedule(statePollingRunnable, 0, TimeUnit.SECONDS);
@@ -320,11 +300,11 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
         return false;
     }
 
-    public boolean unregisterStateListener(StateListener stateListener) {
-        final String serialnumber = stateListener.getDeviceSerialnumber();
-        if (stateListeners.containsKey(serialnumber)) {
-            stateListeners.remove(serialnumber);
-            stateListener.onStateListenerRemoved();
+    public boolean unregisterDeviceListener(DeviceListener deviceListener) {
+        final String serialnumber = deviceListener.getDeviceSerialnumber();
+        if (deviceListeners.containsKey(serialnumber)) {
+            deviceListeners.remove(serialnumber);
+            deviceListener.onStateListenerRemoved();
 
             return true;
         }
@@ -349,23 +329,46 @@ public class XSenseBridgeHandler extends BaseBridgeHandler {
         return false;
     }
 
-    public boolean registerThingUpdateListener(String thingName, SubscriptionTopics topic,
-            ThingUpdateListener listener) {
+    public boolean registerThingUpdateListener(String houseId, String thingName, SubscriptionTopics topic,
+            EventListener listener) {
         if (thing.getStatus() == ThingStatus.ONLINE) {
             if (api != null) {
-                return api.registerThingUpdateListener(thingName, topic, listener);
+                return api.registerThingUpdateListener(houseId, thingName, topic, listener);
             }
         }
 
         return false;
     }
 
-    public boolean unregisterThingUpdateListener(ThingUpdateListener listener) {
+    public boolean unregisterThingUpdateListener(EventListener listener) {
         if (api != null) {
             api.unregisterThingUpdateListener(listener);
             return true;
         }
 
         return false;
+    }
+
+    @Override
+    public void eventReceived(BaseEvent event) {
+        if (event instanceof ForceLogoutEvent) {
+            ForceLogoutEvent forceLogout = (ForceLogoutEvent) event;
+
+            stopStatePolling();
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "another device logged in");
+
+            scheduler.schedule(() -> {
+                cleanup();
+            }, 500, TimeUnit.MILLISECONDS);
+
+            logger.warn("force logout for userid {}", forceLogout.getUserId());
+        } else {
+            logger.warn("unknown subscriptiondata type received {}", event.getClass().toString());
+        }
+    }
+
+    @Override
+    public String getEventIdentifier() {
+        return "";
     }
 }

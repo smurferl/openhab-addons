@@ -14,7 +14,7 @@ package org.openhab.binding.xsense.internal.api.communication.requests;
 
 import org.openhab.binding.xsense.internal.api.ApiConstants.ShadowRequestType;
 import org.openhab.binding.xsense.internal.api.communication.BaseMqttRequest;
-import org.openhab.binding.xsense.internal.api.data.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
 
 import software.amazon.awssdk.iot.iotshadow.model.GetNamedShadowRequest;
 
@@ -30,7 +30,7 @@ public class DevicesStatusRequest extends BaseMqttRequest<GetNamedShadowRequest>
         super(houseId, ShadowRequestType.GET);
 
         shadowRequest = new GetNamedShadowRequest();
-        shadowRequest.thingName = device.deviceType.toString() + device.deviceSerialnumber;
+        shadowRequest.thingName = device.getDeviceType().toString() + device.getDeviceSerialnumber();
         shadowRequest.shadowName = "2nd_mainpage";
         shadowRequest.clientToken = token;
     }

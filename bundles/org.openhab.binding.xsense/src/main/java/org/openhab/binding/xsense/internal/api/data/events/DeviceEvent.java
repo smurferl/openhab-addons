@@ -10,18 +10,23 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.handler;
+package org.openhab.binding.xsense.internal.api.data.events;
 
-import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.xsense.internal.api.data.BaseSubscriptionDeviceData;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
 
 /**
- * The {@link ThingUpdateListener} is notified when a mqtt message arrives for the listener registerd for the specific
- * topic
+ * The {@link DeviceEvent} Event containing data for one specific device
  *
  * @author Jakob Fellner - Initial contribution
  */
-@NonNullByDefault
-public interface ThingUpdateListener {
-    void thingUpdateReceived(BaseSubscriptionDeviceData data);
+public class DeviceEvent {
+    private Device device;
+
+    public DeviceEvent(Device device) {
+        this.device = device;
+    }
+
+    public Device getDevice() {
+        return device;
+    }
 }

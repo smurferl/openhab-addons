@@ -40,9 +40,12 @@ import com.amazonaws.auth.AnonymousAWSCredentials;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.cognitoidp.AWSCognitoIdentityProvider;
 import com.amazonaws.services.cognitoidp.AWSCognitoIdentityProviderClientBuilder;
+import com.amazonaws.services.cognitoidp.model.AttributeType;
 import com.amazonaws.services.cognitoidp.model.AuthFlowType;
 import com.amazonaws.services.cognitoidp.model.AuthenticationResultType;
 import com.amazonaws.services.cognitoidp.model.ChallengeNameType;
+import com.amazonaws.services.cognitoidp.model.GetUserRequest;
+import com.amazonaws.services.cognitoidp.model.GetUserResult;
 import com.amazonaws.services.cognitoidp.model.InitiateAuthRequest;
 import com.amazonaws.services.cognitoidp.model.InitiateAuthResult;
 import com.amazonaws.services.cognitoidp.model.RespondToAuthChallengeRequest;
@@ -162,30 +165,35 @@ public class Authentication {
      * @param password Password for the SRP request
      * @return the JWT token if the request is successful else null.
      */
-    public HashMap<String, String> PerformSRPAuthentication(String username, String password) {
+    public HashMap<String, String> PerformSRPAuthentication(String username, String password) throws Exception {
         HashMap<String, String> authResult = new HashMap<>();
 
         InitiateAuthRequest initiateAuthRequest = initiateUserSrpAuthRequest(username);
-        try {
-            AnonymousAWSCredentials awsCreds = new AnonymousAWSCredentials();
-            AWSCognitoIdentityProvider cognitoIdentityProvider = AWSCognitoIdentityProviderClientBuilder.standard()
-                    .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
-                    .withRegion(Regions.fromName(this.region)).build();
-            InitiateAuthResult initiateAuthResult = cognitoIdentityProvider.initiateAuth(initiateAuthRequest);
-            if (ChallengeNameType.PASSWORD_VERIFIER.toString().equals(initiateAuthResult.getChallengeName())) {
-                String hash = calculateSecretHash(initiateAuthResult.getChallengeParameters().get("USERNAME"), clientId,
-                        secretKey);
-                RespondToAuthChallengeRequest challengeRequest = userSrpAuthRequest(initiateAuthResult, password, hash);
-                RespondToAuthChallengeResult challengeResult = cognitoIdentityProvider
-                        .respondToAuthChallenge(challengeRequest);
-                AuthenticationResultType result = challengeResult.getAuthenticationResult();
+        AnonymousAWSCredentials awsCreds = new AnonymousAWSCredentials();
+        AWSCognitoIdentityProvider cognitoIdentityProvider = AWSCognitoIdentityProviderClientBuilder.standard()
+                .withCredentials(new AWSStaticCredentialsProvider(awsCreds)).withRegion(Regions.fromName(this.region))
+                .build();
+        InitiateAuthResult initiateAuthResult = cognitoIdentityProvider.initiateAuth(initiateAuthRequest);
+        if (ChallengeNameType.PASSWORD_VERIFIER.toString().equals(initiateAuthResult.getChallengeName())) {
+            String hash = calculateSecretHash(initiateAuthResult.getChallengeParameters().get("USERNAME"), clientId,
+                    secretKey);
+            RespondToAuthChallengeRequest challengeRequest = userSrpAuthRequest(initiateAuthResult, password, hash);
+            RespondToAuthChallengeResult challengeResult = cognitoIdentityProvider
+                    .respondToAuthChallenge(challengeRequest);
+            AuthenticationResultType result = challengeResult.getAuthenticationResult();
 
-                authResult.put("accessToken", result.getAccessToken());
-                authResult.put("refreshToken", result.getRefreshToken());
-                authResult.put("exiresIn", Integer.toString(result.getExpiresIn()));
+            GetUserRequest getUserRequest = new GetUserRequest();
+            getUserRequest.setAccessToken(result.getAccessToken());
+            GetUserResult getUserResult = cognitoIdentityProvider.getUser(getUserRequest);
+
+            for (AttributeType attribute : getUserResult.getUserAttributes()) {
+                if (attribute.getName().equals("sub")) {
+                    authResult.put("userId", attribute.getValue());
+                }
             }
-        } catch (final Exception e) {
-            logger.error("failed to authenticate", e);
+            authResult.put("accessToken", result.getAccessToken());
+            authResult.put("refreshToken", result.getRefreshToken());
+            authResult.put("exiresIn", Integer.toString(result.getExpiresIn()));
         }
 
         return authResult;
@@ -214,6 +222,16 @@ public class Authentication {
         InitiateAuthResult initiateAuthResult = cognitoIdentityProvider.initiateAuth(initiateAuthRequest);
 
         AuthenticationResultType result = initiateAuthResult.getAuthenticationResult();
+
+        GetUserRequest getUserRequest = new GetUserRequest();
+        getUserRequest.setAccessToken(result.getAccessToken());
+        GetUserResult getUserResult = cognitoIdentityProvider.getUser(getUserRequest);
+
+        for (AttributeType attribute : getUserResult.getUserAttributes()) {
+            if (attribute.getName().equals("sub")) {
+                authResult.put("sub", attribute.getValue());
+            }
+        }
 
         authResult.put("accessToken", result.getAccessToken());
         authResult.put("refreshToken", result.getRefreshToken() != null ? result.getRefreshToken() : "");

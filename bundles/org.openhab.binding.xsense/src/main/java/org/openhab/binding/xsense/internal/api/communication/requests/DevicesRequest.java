@@ -27,15 +27,3 @@ public class DevicesRequest extends BaseHttpRequest {
         addParameter("utctimestamp", 0);
     }
 }
-
-/*
- * {
- * "appCode": "1180",
- * "appVersion": "v1.18.0_20240311",
- * "bizCode": "103007",
- * "clientType": "2",
- * "houseId": "361861ED12A011EF80F6335B9F745A86",
- * "mac": "2ad1c514e14867e871ca3a845b107c29",
- * "utctimestamp": "0"
- * }
- */

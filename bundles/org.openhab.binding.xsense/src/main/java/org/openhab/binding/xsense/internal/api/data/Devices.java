@@ -13,11 +13,15 @@
 package org.openhab.binding.xsense.internal.api.data;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 
 import org.json.JSONObject;
 import org.openhab.binding.xsense.internal.api.ApiConstants.DeviceType;
+import org.openhab.binding.xsense.internal.api.data.DevicesStatus.SensorStatus;
+import org.openhab.binding.xsense.internal.api.data.DevicesStatus.StationStatus;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 
 /**
  * The {@link Devices} encapsulates all devices returned by the device request
@@ -27,15 +31,136 @@ import org.openhab.binding.xsense.internal.api.ApiConstants.DeviceType;
 public class Devices extends BaseData {
     public HashMap<String, Device> devices = new HashMap<>();
 
+    public class Device {
+        private String deviceId = "";
+        private String deviceName = "";
+        private String deviceSerialnumber = "";
+        private String roomId = "";
+        private String houseId = "";
+        private DeviceType deviceType;
+
+        public Device(String deviceId, String deviceName, String deviceSerialnumber, String roomId, String houseId,
+                DeviceType deviceType) {
+            this.deviceId = deviceId;
+            this.deviceName = deviceName;
+            this.deviceSerialnumber = deviceSerialnumber;
+            this.roomId = roomId;
+            this.houseId = houseId;
+            this.deviceType = deviceType;
+        }
+
+        public String getThingName() {
+            return deviceType.toString() + deviceSerialnumber;
+        }
+
+        public String getDeviceId() {
+            return deviceId;
+        }
+
+        public String getDeviceName() {
+            return deviceName;
+        }
+
+        public String getDeviceSerialnumber() {
+            return deviceSerialnumber;
+        }
+
+        public String getRoomId() {
+            return roomId;
+        }
+
+        public String getHouseId() {
+            return houseId;
+        }
+
+        public DeviceType getDeviceType() {
+            return deviceType;
+        }
+    }
+
+    public class Sensor extends Device {
+        private String stationSerialnumber = "";
+        private DeviceType stationType = DeviceType.UNKNOWN;
+        private SensorStatus status = null;
+
+        public Sensor(String deviceId, String deviceName, String deviceSerialnumber, String roomId, String houseId,
+                DeviceType deviceType) {
+            super(deviceId, deviceName, deviceSerialnumber, roomId, houseId, deviceType);
+        }
+
+        public Sensor(String deviceId, String deviceName, String deviceSerialnumber, String roomId, String houseId,
+                DeviceType deviceType, String stationSerialnumber, DeviceType stationType) {
+            super(deviceId, deviceName, deviceSerialnumber, roomId, houseId, deviceType);
+
+            this.stationSerialnumber = stationSerialnumber;
+            this.stationType = stationType;
+        }
+
+        public String getStationSerialnumber() {
+            return stationSerialnumber;
+        }
+
+        public DeviceType getStationDeviceType() {
+            return stationType;
+        }
+
+        public void setSensorStatus(SensorStatus status) {
+            this.status = status;
+        }
+
+        public SensorStatus getSensorStatus() {
+            return status;
+        }
+    }
+
+    public class Station extends Device {
+        private HashMap<String, Sensor> sensors = new HashMap<>();
+        private StationStatus status = null;
+        private boolean online = false;
+
+        public Station(String deviceId, String deviceName, String deviceSerialnumber, String roomId, String houseId,
+                DeviceType deviceType, boolean online, String userId) {
+            super(deviceId, deviceName, deviceSerialnumber, roomId, houseId, deviceType);
+
+            this.online = online;
+        }
+
+        public void addSensor(Sensor sensor) {
+            sensors.put(sensor.getDeviceSerialnumber(), sensor);
+        }
+
+        public Sensor getSensor(String serialnumber) {
+            return sensors.get(serialnumber);
+        }
+
+        public Collection<Sensor> getSensors() {
+            return sensors.values();
+        }
+
+        public void setStationStatus(StationStatus status) {
+            this.status = status;
+        }
+
+        public StationStatus getStationStatus() {
+            return status;
+        }
+
+        public boolean isOnline() {
+            return online;
+        }
+    }
+
     @Override
     public void deserialize(String input) {
         JSONObject obj = new JSONObject(input);
+
+        String houseId = obj.getJSONObject("reData").getString("houseId");
 
         obj.getJSONObject("reData").getJSONArray("stations").forEach(stationItem -> {
             JSONObject station = (JSONObject) stationItem;
 
             Station s = new Station(station.getString("stationId"), station.getString("stationName"),
-                    station.getString("stationSn"), station.getString("roomId"),
+                    station.getString("stationSn"), station.getString("roomId"), houseId,
                     station.getString("category").equals("SBS50") ? DeviceType.SBS50 : DeviceType.UNKNOWN,
                     station.getInt("onLine") == 1 ? true : false, station.getString("userId"));
 
@@ -43,14 +168,14 @@ public class Devices extends BaseData {
                 JSONObject device = (JSONObject) deviceItem;
 
                 Sensor se = new Sensor(device.getString("deviceId"), device.getString("deviceName"),
-                        device.getString("deviceSn"), device.getString("roomId"),
-                        device.getString("deviceType").equals("XS01-M") ? DeviceType.XS01_M : DeviceType.UNKNOWN, false,
-                        s.deviceSerialnumber, s.deviceType);
+                        device.getString("deviceSn"), device.getString("roomId"), houseId,
+                        device.getString("deviceType").equals("XS01-M") ? DeviceType.XS01_M : DeviceType.UNKNOWN,
+                        s.getDeviceSerialnumber(), s.getDeviceType());
 
                 s.addSensor(se);
             });
 
-            devices.put(s.deviceSerialnumber, s);
+            devices.put(s.getDeviceSerialnumber(), s);
         });
     }
 
@@ -59,10 +184,6 @@ public class Devices extends BaseData {
 
         for (Device device : devices.values()) {
             d.add(device);
-
-            if (device instanceof Station) {
-                d.addAll(((Station) device).getSensors());
-            }
         }
 
         return d;

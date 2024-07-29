@@ -10,13 +10,17 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.api.data;
+package org.openhab.binding.xsense.internal.api.communication.requests;
+
+import org.openhab.binding.xsense.internal.api.communication.BaseHttpRequest;
 
 /**
- * The {@link BaseData} Basis for all datamodels available from xsense api and providing the deserialisation interface
+ * The {@link RegionsRequest} represents requestdata for fetching available service regions
  *
  * @author Jakob Fellner - Initial contribution
  */
-public abstract class BaseData {
-    public abstract void deserialize(String input);
+public class RegionsRequest extends BaseHttpRequest {
+    public RegionsRequest() {
+        super(101004);
+    }
 }

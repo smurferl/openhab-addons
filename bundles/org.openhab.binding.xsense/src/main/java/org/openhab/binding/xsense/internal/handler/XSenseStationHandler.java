@@ -16,8 +16,8 @@ import static org.openhab.binding.xsense.internal.XSenseBindingConstants.CHANNEL
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.xsense.internal.XSenseBindingConstants;
-import org.openhab.binding.xsense.internal.api.data.Device;
-import org.openhab.binding.xsense.internal.api.data.Station;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
@@ -26,6 +26,7 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +37,7 @@ import org.slf4j.LoggerFactory;
  * @author Jakob Fellner - Initial contribution
  */
 @NonNullByDefault
-public class XSenseStationHandler extends BaseThingHandler implements StateListener {
+public class XSenseStationHandler extends BaseThingHandler implements DeviceListener {
     private final Logger logger = LoggerFactory.getLogger(XSenseStationHandler.class);
 
     public XSenseStationHandler(Thing thing) {
@@ -53,8 +54,10 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
 
                 stationSerialnumber = stationSerialnumber == null ? "" : stationSerialnumber;
 
-                if (XSenseBindingConstants.CHANNEL_VOICEVOLUME.equals(channelUID.getId())) {
-                    bridgeHandler.setVoicePromptVolume(stationSerialnumber, ((DecimalType) command).intValue());
+                if (!(command instanceof RefreshType)) {
+                    if (XSenseBindingConstants.CHANNEL_VOICEVOLUME.equals(channelUID.getId())) {
+                        bridgeHandler.setVoicePromptVolume(stationSerialnumber, ((DecimalType) command).intValue());
+                    }
                 }
             }
         }
@@ -70,7 +73,7 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
             if (bridge != null) {
                 XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
                 if (bridgeHandler != null) {
-                    bridgeHandler.registerStateListener(this);
+                    bridgeHandler.registerDeviceListener(this);
                 }
             }
         });
@@ -82,7 +85,7 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
         if (bridge != null) {
             XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
             if (bridgeHandler != null) {
-                bridgeHandler.unregisterStateListener(this);
+                bridgeHandler.unregisterDeviceListener(this);
             }
         }
     }
@@ -94,9 +97,10 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
             XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
             if (bridgeHandler != null) {
                 if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
-                    bridgeHandler.registerStateListener(this);
+                    bridgeHandler.registerDeviceListener(this);
                 } else {
-                    bridgeHandler.unregisterStateListener(this);
+                    updateStatus(ThingStatus.OFFLINE);
+                    bridgeHandler.unregisterDeviceListener(this);
                 }
             }
         }
@@ -114,13 +118,13 @@ public class XSenseStationHandler extends BaseThingHandler implements StateListe
     public void onUpdateDevice(Device device) {
         Station station = (Station) device;
 
-        if (station.online) {
+        if (station.isOnline()) {
             updateStatus(ThingStatus.ONLINE);
         } else {
             updateStatus(ThingStatus.OFFLINE);
         }
 
-        updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(station.wifiRSSI));
+        updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(station.getStationStatus().getConnectionQuality()));
     }
 
     @Override

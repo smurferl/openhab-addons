@@ -12,9 +12,11 @@
  */
 package org.openhab.binding.xsense.internal.api.data;
 
+import java.util.Collection;
 import java.util.HashMap;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 
 /**
  * The {@link Houses} contains all houses/homes, retured by the house request, sent to the xsense api
@@ -22,7 +24,37 @@ import org.json.JSONObject;
  * @author Jakob Fellner - Initial contribution
  */
 public class Houses extends BaseData {
-    public HashMap<String, House> houses = new HashMap<>();
+    private HashMap<String, House> houses = new HashMap<>();
+
+    public class House {
+        private String mqttRegion = "";
+        private String mqttServer = "";
+        private String houseId = "";
+        private String houseName = "";
+
+        public House(String mqttRegion, String mqttServer, String houseId, String houseName) {
+            this.mqttRegion = mqttRegion;
+            this.mqttServer = mqttServer;
+            this.houseId = houseId;
+            this.houseName = houseName;
+        }
+
+        public String getMqttRegion() {
+            return mqttRegion;
+        }
+
+        public String getMqttServer() {
+            return mqttServer;
+        }
+
+        public String getHouseId() {
+            return houseId;
+        }
+
+        public String getHouseName() {
+            return houseName;
+        }
+    }
 
     @Override
     public void deserialize(String input) {
@@ -33,5 +65,13 @@ public class Houses extends BaseData {
             houses.put(house.getString("houseId"), new House(house.getString("mqttRegion"),
                     house.getString("mqttServer"), house.getString("houseId"), house.getString("houseName")));
         });
+    }
+
+    public House getHouse(String houseId) {
+        return houses.get(houseId);
+    }
+
+    public Collection<House> getHouses() {
+        return houses.values();
     }
 }

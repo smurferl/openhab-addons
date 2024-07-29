@@ -21,8 +21,9 @@ import java.util.Set;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.xsense.internal.XSenseBindingConstants;
 import org.openhab.binding.xsense.internal.api.ApiConstants.DeviceType;
-import org.openhab.binding.xsense.internal.api.data.Device;
-import org.openhab.binding.xsense.internal.api.data.Sensor;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Sensor;
+import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 import org.openhab.binding.xsense.internal.handler.XSenseBridgeHandler;
 import org.openhab.core.config.discovery.AbstractThingHandlerDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
@@ -69,6 +70,11 @@ public class XSenseDiscoveryService extends AbstractThingHandlerDiscoveryService
     protected void startScan() {
         List<Device> devices = thingHandler.getFullDevices();
         for (Device device : devices) {
+            if (device instanceof Station) {
+                Station station = (Station) device;
+                station.getSensors().forEach(this::addDeviceDiscovery);
+            }
+
             addDeviceDiscovery(device);
         }
     }
@@ -81,10 +87,11 @@ public class XSenseDiscoveryService extends AbstractThingHandlerDiscoveryService
 
     public void addDeviceDiscovery(Device device) {
         Map<String, Object> properties = new HashMap<>();
-        properties.put("serialnumber", device.deviceSerialnumber);
+        properties.put("serialnumber", device.getDeviceSerialnumber());
+        properties.put("houseId", device.getHouseId());
         if (device instanceof Sensor) {
-            String stationSerialnumber = ((Sensor) device).stationSerialnumber;
-            DeviceType stationType = ((Sensor) device).stationType;
+            String stationSerialnumber = ((Sensor) device).getStationSerialnumber();
+            DeviceType stationType = ((Sensor) device).getStationDeviceType();
             if (!stationSerialnumber.isEmpty()) {
                 properties.put("station_serialnumber", stationSerialnumber);
                 properties.put("station_type", stationType.toString());
@@ -92,11 +99,11 @@ public class XSenseDiscoveryService extends AbstractThingHandlerDiscoveryService
         }
 
         DiscoveryResult discoveryResult = DiscoveryResultBuilder
-                .create(new ThingUID("xsense:" + device.deviceType + ":" + thingHandler.getThing().getUID().getId()
-                        + ":" + device.deviceId.toLowerCase()))
-                .withThingType(new ThingTypeUID("xsense:" + device.deviceType)).withProperties(properties)
+                .create(new ThingUID("xsense:" + device.getDeviceType() + ":" + thingHandler.getThing().getUID().getId()
+                        + ":" + device.getDeviceId().toLowerCase()))
+                .withThingType(new ThingTypeUID("xsense:" + device.getDeviceType())).withProperties(properties)
                 .withBridge(thingHandler.getThing().getUID()).withRepresentationProperty("serialnumber")
-                .withLabel(device.deviceName).build();
+                .withLabel(device.getDeviceName()).build();
 
         thingDiscovered(discoveryResult);
     }

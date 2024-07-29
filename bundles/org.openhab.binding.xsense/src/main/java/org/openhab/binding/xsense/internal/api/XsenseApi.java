@@ -31,28 +31,31 @@ import org.openhab.binding.xsense.internal.api.communication.BaseMqttRequest;
 import org.openhab.binding.xsense.internal.api.communication.BaseRequest;
 import org.openhab.binding.xsense.internal.api.communication.BaseResponse;
 import org.openhab.binding.xsense.internal.api.communication.Mqtt;
+import org.openhab.binding.xsense.internal.api.communication.Subscription;
 import org.openhab.binding.xsense.internal.api.communication.requests.ClientInfoRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.DevicesRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.DevicesStatusRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.HousesRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.MuteRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.OAuthRequest;
+import org.openhab.binding.xsense.internal.api.communication.requests.RegionsRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.RoomsRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.SelfTestRequest;
 import org.openhab.binding.xsense.internal.api.communication.requests.VoicePromptRequest;
-import org.openhab.binding.xsense.internal.api.data.BaseData;
 import org.openhab.binding.xsense.internal.api.data.ClientInfo;
-import org.openhab.binding.xsense.internal.api.data.Device;
 import org.openhab.binding.xsense.internal.api.data.Devices;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Sensor;
+import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 import org.openhab.binding.xsense.internal.api.data.DevicesStatus;
-import org.openhab.binding.xsense.internal.api.data.House;
+import org.openhab.binding.xsense.internal.api.data.DevicesStatus.SensorStatus;
 import org.openhab.binding.xsense.internal.api.data.Houses;
+import org.openhab.binding.xsense.internal.api.data.Houses.House;
 import org.openhab.binding.xsense.internal.api.data.OAuth;
+import org.openhab.binding.xsense.internal.api.data.Regions;
+import org.openhab.binding.xsense.internal.api.data.Regions.Region;
 import org.openhab.binding.xsense.internal.api.data.Rooms;
-import org.openhab.binding.xsense.internal.api.data.Sensor;
-import org.openhab.binding.xsense.internal.api.data.SensorStatus;
-import org.openhab.binding.xsense.internal.api.data.Station;
-import org.openhab.binding.xsense.internal.handler.ThingUpdateListener;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +68,7 @@ import com.amazonaws.util.Base64;
  */
 public class XsenseApi {
     private final Logger logger = LoggerFactory.getLogger(XsenseApi.class);
+    private Houses houses;
     private Authentication authentication = null;
     private HttpClient apiClient;
     private String apiHost = "";
@@ -73,6 +77,7 @@ public class XsenseApi {
     private String clientSecret = "";
     private String accessToken = "";
     private String refreshToken = "";
+    private String userId = "";
     private long expiration = 0;
     private String username = "";
     private String password = "";
@@ -112,6 +117,9 @@ public class XsenseApi {
                     long now = System.currentTimeMillis();
                     expiration = now + TimeUnit.SECONDS.toMillis(expiresIn);
                 }
+            }
+            if (result.containsKey("userId")) {
+                userId = result.get("userId");
             } else {
                 success = false;
             }
@@ -140,7 +148,7 @@ public class XsenseApi {
                         logger.warn("parsing authentication result for refreshing failed: {}", res.toString());
                     }
 
-                    connectMqtt(true);
+                    connectMqtt();
                 }
 
                 BaseHttpRequest httpReq = (BaseHttpRequest) req;
@@ -151,11 +159,18 @@ public class XsenseApi {
                 result = apiClient.send(request, HttpResponse.BodyHandlers.ofString()).body();
             } else if (req.type() == RequestType.MQTT) {
                 BaseMqttRequest<?> mqttReq = (BaseMqttRequest<?>) req;
-                if (mqttClients.containsKey(mqttReq.houseId())) {
-                    Mqtt mqtt = mqttClients.get(mqttReq.houseId());
+                House house = houses.getHouse(mqttReq.houseId());
+                if (house != null) {
+                    if (mqttClients.containsKey(house.getMqttRegion())) {
+                        Mqtt mqtt = mqttClients.get(house.getMqttRegion());
 
-                    mqtt.sendRequest(mqttReq);
-                    result = mqttReq.getResponse();
+                        mqtt.sendRequest(mqttReq);
+                        result = mqttReq.getResponse();
+                    } else {
+                        logger.warn("no mqtt connection found for region {}", house.getMqttRegion());
+                    }
+                } else {
+                    logger.warn("house with id {} not found", mqttReq.houseId());
                 }
             } else {
                 result = "{\"reCode\": 401, \"reMsg\":\"unsupported requesttype\"}";
@@ -188,9 +203,20 @@ public class XsenseApi {
         return (OAuth) response.getData();
     }
 
+    private Regions getRegions() throws Exception {
+        BaseResponse response = sendRequest(new RegionsRequest(), Regions.class);
+
+        if (response.getReturnCode() != 200)
+            throw new Exception(
+                    "Regions Request failed " + response.getReturnCode() + ": " + response.getReturnMessage());
+
+        return (Regions) response.getData();
+    }
+
     public void login() throws Exception {
         authenticate();
-        connectMqtt(false);
+        connectMqtt();
+        houses = getHouses();
     }
 
     private void authenticate() throws Exception {
@@ -206,29 +232,21 @@ public class XsenseApi {
         }
     }
 
-    private void connectMqtt(boolean reconnect) {
+    private void connectMqtt() {
         try {
-            Houses houses = getHouses();
+            Regions regions = getRegions();
             OAuth oAuth = getOAuth(username);
 
-            houses.houses.values().forEach(item -> {
-                House house = (House) item;
+            regions.getRegions().forEach(item -> {
+                Region region = (Region) item;
 
-                if (reconnect) {
-                    if (mqttClients.containsKey(house.houseId)) {
-                        Mqtt client = mqttClients.get(house.houseId);
-                        if (client != null) {
-                            client.connect(oAuth.accessKeyId, oAuth.secretAccessKey, oAuth.sessionToken, clientId,
-                                    house.mqttServer, house.mqttRegion);
-                        }
-                    }
-                } else {
-                    Mqtt mqtt = new Mqtt();
-                    if (mqtt.connect(oAuth.accessKeyId, oAuth.secretAccessKey, oAuth.sessionToken, clientId,
-                            house.mqttServer, house.mqttRegion)) {
-                        mqttClients.put(house.houseId, mqtt);
-                    }
+                Mqtt mqttClient = mqttClients.get(region.getMqttRegion());
+                if (mqttClient == null) {
+                    mqttClient = new Mqtt(clientId, region.getMqttServer(), region.getMqttRegion());
+                    mqttClients.put(region.getMqttRegion(), mqttClient);
                 }
+
+                mqttClient.connect(oAuth);
             });
         } catch (Exception e) {
             logger.error("failed to connect mqtt", e);
@@ -275,20 +293,16 @@ public class XsenseApi {
 
         DevicesStatus status = null;
         for (Device device : devices.devices.values()) {
-            device.houseId = houseId;
             if (device instanceof Station) {
-                response = sendRequest(new DevicesStatusRequest(houseId, device), DevicesStatus.class);
+                response = sendRequest(new DevicesStatusRequest(device.getHouseId(), device), DevicesStatus.class);
 
                 if (response.getReturnCode() == 200) {
                     status = (DevicesStatus) response.getData();
-                    ((Station) device).wifiRSSI = status.stationStatus.rssi;
+                    ((Station) device).setStationStatus(status.getStationStatus());
 
-                    for (SensorStatus sensorStatus : status.sensorsStatus) {
+                    for (SensorStatus sensorStatus : status.getSensorStatus()) {
                         Sensor sensor = (Sensor) ((Station) device).getSensor(sensorStatus.serialnumber);
-                        sensor.houseId = houseId;
-                        sensor.batteryInfo = sensorStatus.battery;
-                        sensor.rfLevel = sensorStatus.rfLevel;
-                        sensor.online = sensorStatus.online;
+                        sensor.setSensorStatus(sensorStatus);
                     }
                 } else {
                     logger.warn("DevicesStatus Request failed {}: {}", response.getReturnCode(),
@@ -309,30 +323,54 @@ public class XsenseApi {
     }
 
     public boolean doSelfTest(Station station, Sensor sensor) {
-        BaseResponse response = sendRequest(new SelfTestRequest(station, sensor), BaseData.class);
+        BaseResponse response = sendRequest(new SelfTestRequest(userId, station, sensor), BaseData.class);
 
         return response.getReturnCode() == 200;
     }
 
     public boolean muteSensor(Station station, Sensor sensor) {
-        BaseResponse response = sendRequest(new MuteRequest(station, sensor), BaseData.class);
+        BaseResponse response = sendRequest(new MuteRequest(userId, station, sensor), BaseData.class);
 
         return response.getReturnCode() == 200;
     }
 
-    public boolean registerThingUpdateListener(String thing, SubscriptionTopics topic, ThingUpdateListener listener) {
-        String t = topic.toString().replace("{}", thing);
+    private boolean registerThingUpdateListener(String mqttRegion, Subscription subscription, EventListener listener) {
+        Mqtt mqttClient = mqttClients.get(mqttRegion);
 
-        for (Mqtt mqtt : mqttClients.values()) {
-            if (!mqtt.registerThingUpdateListener(t, listener)) {
-                return false;
-            }
+        if (mqttClient != null) {
+            return mqttClient.registerThingUpdateListener(subscription, listener);
+        } else {
+            logger.warn("failed to get mqttclient for region {}", mqttRegion);
         }
 
-        return true;
+        return false;
     }
 
-    public void unregisterThingUpdateListener(ThingUpdateListener listener) {
+    public boolean registerThingUpdateListener(String mqttRegion, SubscriptionTopics topic, EventListener listener) {
+        String t = topic.toString().replace("{userId}", userId);
+
+        Subscription subscription = new Subscription(topic.getDataClass(), t);
+
+        return registerThingUpdateListener(mqttRegion, subscription, listener);
+    }
+
+    public boolean registerThingUpdateListener(String houseId, String thing, SubscriptionTopics topic,
+            EventListener listener) {
+        House house = houses.getHouse(houseId);
+        if (house != null) {
+            String t = topic.toString().replace("{thing}", thing);
+
+            Subscription subscription = new Subscription(topic.getDataClass(), t);
+
+            registerThingUpdateListener(house.getMqttRegion(), subscription, listener);
+        } else {
+            logger.warn("failed to get house with id {}", houseId);
+        }
+
+        return false;
+    }
+
+    public void unregisterThingUpdateListener(EventListener listener) {
         for (Mqtt mqtt : mqttClients.values()) {
             mqtt.unregisterThingUpdateListener(listener);
         }

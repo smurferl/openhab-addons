@@ -10,24 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.handler;
+package org.openhab.binding.xsense.internal.api;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.xsense.internal.api.data.Device;
+import org.openhab.binding.xsense.internal.api.data.base.BaseEvent;
 
 /**
- * The {@link StateListener} is notified when a xsense sensor state has changed or a sensor has been removed or added.
- * sent to one of the channels.
+ * The {@link EventListener} is notified when a mqtt message arrives for the listener registerd for the specific
+ * topic
  *
  * @author Jakob Fellner - Initial contribution
  */
 @NonNullByDefault
-public interface StateListener {
-    void onStateListenerAdded();
+public interface EventListener {
+    void eventReceived(BaseEvent event);
 
-    void onStateListenerRemoved();
-
-    void onUpdateDevice(Device device);
-
-    String getDeviceSerialnumber();
+    String getEventIdentifier();
 }

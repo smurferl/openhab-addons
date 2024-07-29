@@ -10,16 +10,36 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.api.data;
+package org.openhab.binding.xsense.internal.api.data.events;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.data.base.BaseEvent;
+import org.openhab.binding.xsense.internal.api.data.base.BaseSubscriptionMessage;
 
 /**
  * The {@link SelfTestResults} represents all results of smokedetector selftests
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class SelfTestResults extends BaseSubscriptionData {
+public class SelfTestResults extends BaseSubscriptionMessage {
+
+    public class SelfTestResultEvent extends BaseEvent {
+        private boolean success = false;
+
+        public SelfTestResultEvent(String stationSerialnumber, String sensorSerialnumber, boolean success) {
+            super(stationSerialnumber, sensorSerialnumber);
+            this.success = success;
+        }
+
+        public SelfTestResultEvent(String sensorSerialnumber, boolean success) {
+            super(sensorSerialnumber);
+            this.success = success;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+    }
 
     @Override
     public void deserialize(String input) {
@@ -37,11 +57,11 @@ public class SelfTestResults extends BaseSubscriptionData {
                     if (result.has("deviceSN") && result.has("selfTest")) {
                         // assumed to only be present for basestation connected sensors
                         if (result.has("stationSN")) {
-                            addResponse(result.getString("stationSN") + result.getString("deviceSN"),
-                                    new SelfTestResult(result.getString("stationSN"), result.getString("deviceSN"),
+                            addEvent(result.getString("stationSN") + result.getString("deviceSN"),
+                                    new SelfTestResultEvent(result.getString("stationSN"), result.getString("deviceSN"),
                                             result.getString("selfTest").equals("0") ? true : false));
                         } else {
-                            addResponse(result.getString("deviceSN"), new SelfTestResult(result.getString("deviceSN"),
+                            addEvent(result.getString("deviceSN"), new SelfTestResultEvent(result.getString("deviceSN"),
                                     result.getString("selfTest").equals("0") ? true : false));
                         }
                     }

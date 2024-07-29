@@ -16,8 +16,8 @@ import java.util.HashMap;
 
 import org.openhab.binding.xsense.internal.api.ApiConstants.ShadowRequestType;
 import org.openhab.binding.xsense.internal.api.communication.BaseMqttRequest;
-import org.openhab.binding.xsense.internal.api.data.Sensor;
-import org.openhab.binding.xsense.internal.api.data.Station;
+import org.openhab.binding.xsense.internal.api.data.Devices.Sensor;
+import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 
 import software.amazon.awssdk.iot.iotshadow.model.ShadowState;
 import software.amazon.awssdk.iot.iotshadow.model.UpdateNamedShadowRequest;
@@ -30,19 +30,19 @@ import software.amazon.awssdk.iot.iotshadow.model.UpdateNamedShadowRequest;
 public class MuteRequest extends BaseMqttRequest<UpdateNamedShadowRequest> {
     UpdateNamedShadowRequest getNamedShadowRequest;
 
-    public MuteRequest(Station station, Sensor sensor) {
-        super(sensor.houseId, ShadowRequestType.UPDATE);
+    public MuteRequest(String userId, Station station, Sensor sensor) {
+        super(sensor.getHouseId(), ShadowRequestType.UPDATE);
 
         ShadowState shadowState = new ShadowState();
         shadowState.desired = new HashMap<String, Object>();
         shadowState.desired.put("shadow", "appMute");
-        shadowState.desired.put("deviceSN", sensor.deviceSerialnumber);
-        shadowState.desired.put("stationSN", station.deviceSerialnumber);
-        shadowState.desired.put("userId", station.userId);
+        shadowState.desired.put("deviceSN", sensor.getDeviceSerialnumber());
+        shadowState.desired.put("stationSN", station.getDeviceSerialnumber());
+        shadowState.desired.put("userId", userId);
         shadowState.desired.put("muteType", "0");
 
         shadowRequest = new UpdateNamedShadowRequest();
-        shadowRequest.thingName = station.deviceType.toString() + station.deviceSerialnumber;
+        shadowRequest.thingName = station.getDeviceType().toString() + station.getDeviceSerialnumber();
         shadowRequest.shadowName = "2nd_appmute";
         shadowRequest.state = shadowState;
         shadowRequest.clientToken = token;

@@ -16,7 +16,7 @@ import java.util.HashMap;
 
 import org.openhab.binding.xsense.internal.api.ApiConstants.ShadowRequestType;
 import org.openhab.binding.xsense.internal.api.communication.BaseMqttRequest;
-import org.openhab.binding.xsense.internal.api.data.Device;
+import org.openhab.binding.xsense.internal.api.data.Devices.Device;
 
 import software.amazon.awssdk.iot.iotshadow.model.ShadowState;
 import software.amazon.awssdk.iot.iotshadow.model.UpdateNamedShadowRequest;
@@ -30,17 +30,17 @@ public class VoicePromptRequest extends BaseMqttRequest<UpdateNamedShadowRequest
     UpdateNamedShadowRequest getNamedShadowRequest;
 
     public VoicePromptRequest(Device station, int volume) {
-        super(station.houseId, ShadowRequestType.UPDATE);
+        super(station.getHouseId(), ShadowRequestType.UPDATE);
 
         ShadowState shadowState = new ShadowState();
         shadowState.desired = new HashMap<String, Object>();
         shadowState.desired.put("shadow", "infoBase");
-        shadowState.desired.put("stationSN", station.deviceSerialnumber);
+        shadowState.desired.put("stationSN", station.getDeviceSerialnumber());
         shadowState.desired.put("voiceVol", Integer.toString(volume));
 
         shadowRequest = new UpdateNamedShadowRequest();
-        shadowRequest.thingName = station.deviceType.toString() + station.deviceSerialnumber;
-        shadowRequest.shadowName = "2nd_cfg_" + station.deviceSerialnumber;
+        shadowRequest.thingName = station.getDeviceType().toString() + station.getDeviceSerialnumber();
+        shadowRequest.shadowName = "2nd_cfg_" + station.getDeviceSerialnumber();
         shadowRequest.state = shadowState;
         shadowRequest.clientToken = token;
     }

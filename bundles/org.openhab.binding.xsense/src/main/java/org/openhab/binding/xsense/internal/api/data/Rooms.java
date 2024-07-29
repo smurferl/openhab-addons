@@ -15,6 +15,7 @@ package org.openhab.binding.xsense.internal.api.data;
 import java.util.HashMap;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.data.base.BaseData;
 
 /**
  * The {@link Room} represents all rooms, returned by the room request to xsense api
@@ -23,6 +24,30 @@ import org.json.JSONObject;
  */
 public class Rooms extends BaseData {
     public HashMap<String, Room> rooms = new HashMap<>();
+
+    public class Room {
+        private String houseId = "";
+        private String roomId = "";
+        private String roomName = "";
+
+        public Room(String houseId, String roomId, String roomName) {
+            this.houseId = houseId;
+            this.roomId = roomId;
+            this.roomName = roomName;
+        }
+
+        public String getHouseId() {
+            return houseId;
+        }
+
+        public String getRoomId() {
+            return roomId;
+        }
+
+        public String getRoomName() {
+            return roomName;
+        }
+    }
 
     @Override
     public void deserialize(String input) {

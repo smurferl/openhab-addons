@@ -10,16 +10,36 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.api.data;
+package org.openhab.binding.xsense.internal.api.data.events;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.data.base.BaseEvent;
+import org.openhab.binding.xsense.internal.api.data.base.BaseSubscriptionMessage;
 
 /**
  * The {@link Mutes} represents all results of smokedetector alarms mutes
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class Mutes extends BaseSubscriptionData {
+public class Mutes extends BaseSubscriptionMessage {
+
+    public class MuteEvent extends BaseEvent {
+        private String trigger = "";
+
+        public MuteEvent(String stationSerialnumber, String sensorSerialnumber, String trigger) {
+            super(stationSerialnumber, sensorSerialnumber);
+            this.trigger = trigger;
+        }
+
+        public MuteEvent(String sensorSerialnumber, String trigger) {
+            super(sensorSerialnumber);
+            this.trigger = trigger;
+        }
+
+        public String getTrigger() {
+            return trigger;
+        }
+    }
 
     @Override
     public void deserialize(String input) {
@@ -36,12 +56,12 @@ public class Mutes extends BaseSubscriptionData {
 
                     if (result.has("deviceSN") && result.has("who")) {
                         if (result.has("stationSN")) {
-                            addResponse(result.getString("stationSN") + result.getString("deviceSN"),
-                                    new Mute(result.getString("stationSN"), result.getString("deviceSN"),
+                            addEvent(result.getString("stationSN") + result.getString("deviceSN"),
+                                    new MuteEvent(result.getString("stationSN"), result.getString("deviceSN"),
                                             result.getString("who")));
                         } else {
-                            addResponse(result.getString("deviceSN"),
-                                    new Mute(result.getString("deviceSN"), result.getString("who")));
+                            addEvent(result.getString("deviceSN"),
+                                    new MuteEvent(result.getString("deviceSN"), result.getString("who")));
                         }
                     }
                 }

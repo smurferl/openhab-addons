@@ -10,21 +10,13 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.xsense.internal.api.data;
+package org.openhab.binding.xsense.internal.api.data.base;
 
 /**
- * The {@link Room} contains all relevant data, describing one room in the xsense datastructure
+ * The {@link BaseData} Basis for all datamodels available from xsense api and providing the deserialisation interface
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class Room {
-    public String houseId = "";
-    public String roomId = "";
-    public String roomName = "";
-
-    public Room(String houseId, String roomId, String roomName) {
-        this.houseId = houseId;
-        this.roomId = roomId;
-        this.roomName = roomName;
-    }
+public abstract class BaseData {
+    public abstract void deserialize(String input);
 }
