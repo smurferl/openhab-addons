@@ -27,7 +27,7 @@ public class DevicesStatus extends BaseData {
     private StationStatus stationStatus;
 
     public class DeviceStatus {
-        public String serialnumber;
+        private String serialnumber;
         private int connectionQuality = 0;
 
         DeviceStatus(String serialnumber, int connectionQuality) {

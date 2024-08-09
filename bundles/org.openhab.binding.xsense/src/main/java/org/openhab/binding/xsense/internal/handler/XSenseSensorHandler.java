@@ -33,6 +33,7 @@ import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
@@ -94,10 +95,9 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
 
                     if (houseId != null) {
                         bridgeHandler.registerDeviceListener(this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.SELFTEST,
-                                this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.ALARM, this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.MUTE, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.SELFTEST, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.ALARM, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.MUTE, this);
                     } else {
                         logger.error("no house id set for {}", thingName);
                     }
@@ -113,7 +113,7 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
             XSenseBridgeHandler bridgeHandler = (XSenseBridgeHandler) bridge.getHandler();
             if (bridgeHandler != null) {
                 bridgeHandler.unregisterDeviceListener(this);
-                bridgeHandler.unregisterThingUpdateListener(this);
+                bridgeHandler.unregisterEventListener(this);
             }
         }
     }
@@ -130,17 +130,16 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
 
                     if (houseId != null) {
                         bridgeHandler.registerDeviceListener(this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.SELFTEST,
-                                this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.ALARM, this);
-                        bridgeHandler.registerThingUpdateListener(houseId, thingName, SubscriptionTopics.MUTE, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.SELFTEST, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.ALARM, this);
+                        bridgeHandler.registerEventListener(houseId, thingName, SubscriptionTopics.MUTE, this);
                     } else {
                         logger.error("no house id set for {}", thingName);
                     }
                 } else {
                     updateStatus(ThingStatus.OFFLINE);
                     bridgeHandler.unregisterDeviceListener(this);
-                    bridgeHandler.unregisterThingUpdateListener(this);
+                    bridgeHandler.unregisterEventListener(this);
                 }
             }
         }
@@ -229,5 +228,19 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
         }
 
         return thingName;
+    }
+
+    @Override
+    public void updateEventConnectionStatus(boolean connectionFailed) {
+        if (connectionFailed) {
+            if (thing.getStatus() == ThingStatus.ONLINE) {
+                logger.warn("eventconnection failed");
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "eventconnection interrupted");
+            }
+        } else {
+            if (thing.getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+            }
+        }
     }
 }

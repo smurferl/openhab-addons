@@ -51,7 +51,7 @@ public class BaseResponse {
                     data.deserialize(input);
                 }
             } else {
-                logger.error("error {} in response: {}", returnCode, returnMessage);
+                logger.warn("{} error {} in response: {}", type, returnCode, input);
             }
         } else {
             logger.warn("empty response");

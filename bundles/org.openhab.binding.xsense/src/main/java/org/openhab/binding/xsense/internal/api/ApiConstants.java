@@ -13,7 +13,7 @@
 package org.openhab.binding.xsense.internal.api;
 
 import org.openhab.binding.xsense.internal.api.data.events.Alarms;
-import org.openhab.binding.xsense.internal.api.data.events.ForceLogout;
+import org.openhab.binding.xsense.internal.api.data.events.Login;
 import org.openhab.binding.xsense.internal.api.data.events.Mutes;
 import org.openhab.binding.xsense.internal.api.data.events.SelfTestResults;
 
@@ -27,6 +27,8 @@ public final class ApiConstants {
     public static String APP_VERSION = "v1.18.0_20240311";
     public static String APP_CODE = "1180";
     public static String API_HOST = "https://api.x-sense-iot.com/app";
+    public static String DEBUG_PROXY_IP = "";
+    public static int DEBUG_PROXY_PORT = 0;
 
     public enum DeviceType {
         UNKNOWN("UNKNOWN"),
@@ -68,7 +70,7 @@ public final class ApiConstants {
         SELFTEST("$aws/things/{thing}/shadow/name/2nd_selftestup/update", SelfTestResults.class),
         ALARM("$aws/things/{thing}/shadow/name/2nd_safealarm/update", Alarms.class),
         MUTE("$aws/things/{thing}/shadow/name/2nd_muteup/update", Mutes.class),
-        LOGIN("@claybox/events/apptoken/{userId}", ForceLogout.class);
+        LOGIN("@claybox/events/apptoken/{userId}", Login.class);
 
         private final String topic;
         private final Class<?> dataClass;

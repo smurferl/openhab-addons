@@ -13,15 +13,26 @@
 package org.openhab.binding.xsense.internal.api;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpClient.Builder;
 import java.net.http.HttpClient.Version;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
+import org.eclipse.jdt.annotation.Nullable;
 import org.json.JSONException;
 import org.openhab.binding.xsense.internal.api.ApiConstants.RequestType;
 import org.openhab.binding.xsense.internal.api.ApiConstants.SubscriptionTopics;
@@ -68,24 +79,35 @@ import com.amazonaws.util.Base64;
  */
 public class XsenseApi {
     private final Logger logger = LoggerFactory.getLogger(XsenseApi.class);
+    private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Lock sessionLock = new ReentrantLock(true);
+    private @Nullable ScheduledFuture<?> refreshCognitoSession = null;
+    private @Nullable ScheduledFuture<?> refreshOAuthSession = null;
     private Houses houses;
     private Authentication authentication = null;
     private HttpClient apiClient;
     private String apiHost = "";
-    private String region = "";
+    private String userRegion = "";
     private String clientId = "";
     private String clientSecret = "";
     private String accessToken = "";
     private String refreshToken = "";
     private String userId = "";
-    private long expiration = 0;
+    private long expiresIn = 0;
     private String username = "";
     private String password = "";
 
     private HashMap<String, Mqtt> mqttClients = new HashMap<String, Mqtt>();
 
     public XsenseApi(String username, String password) {
-        apiClient = HttpClient.newHttpClient();
+        Builder httpClientBuilder = HttpClient.newBuilder();
+        if (ApiConstants.DEBUG_PROXY_IP.isEmpty()) {
+            httpClientBuilder = httpClientBuilder.proxy(ProxySelector
+                    .of(new InetSocketAddress(ApiConstants.DEBUG_PROXY_IP, ApiConstants.DEBUG_PROXY_PORT)));
+        }
+
+        apiClient = httpClientBuilder.build();
+
         this.apiHost = ApiConstants.API_HOST;
         this.username = username;
         this.password = password;
@@ -105,23 +127,21 @@ public class XsenseApi {
             } else {
                 success = false;
             }
-            if (result.containsKey("refreshToken")) {
-                refreshToken = result.get("refreshToken").isEmpty() ? refreshToken : result.get("refreshToken");
-            } else {
-                success = false;
-            }
             if (result.containsKey("exiresIn")) {
                 String value = result.get("exiresIn");
                 if (value != null) {
-                    int expiresIn = Integer.parseInt(value);
-                    long now = System.currentTimeMillis();
-                    expiration = now + TimeUnit.SECONDS.toMillis(expiresIn);
+                    expiresIn = TimeUnit.SECONDS.toMillis(Integer.parseInt(value));
                 }
             }
             if (result.containsKey("userId")) {
                 userId = result.get("userId");
             } else {
                 success = false;
+            }
+
+            // only present on initial login
+            if (result.containsKey("refreshToken")) {
+                refreshToken = result.get("refreshToken").isEmpty() ? refreshToken : result.get("refreshToken");
             }
         } else {
             success = false;
@@ -130,27 +150,12 @@ public class XsenseApi {
         return success;
     }
 
-    private boolean needAuthenticationRefresh() {
-        long now = System.currentTimeMillis();
-        long expires = expiration - TimeUnit.SECONDS.toMillis(60);
-
-        return now > expires;
-    }
-
     private BaseResponse sendRequest(BaseRequest req, Class<?> type) {
+        sessionLock.lock();
         String result = "";
 
         try {
             if (req.type() == RequestType.HTTP) {
-                if (authentication != null && needAuthenticationRefresh()) {
-                    HashMap<String, String> res = authentication.PerformRefreshAuthentication(refreshToken);
-                    if (!parseAuthenticationResult(res)) {
-                        logger.warn("parsing authentication result for refreshing failed: {}", res.toString());
-                    }
-
-                    connectMqtt();
-                }
-
                 BaseHttpRequest httpReq = (BaseHttpRequest) req;
                 HttpRequest request = HttpRequest.newBuilder().uri(URI.create(apiHost)).version(Version.HTTP_1_1)
                         .POST(HttpRequest.BodyPublishers.ofString(httpReq.generateJson(clientSecret)))
@@ -180,6 +185,7 @@ public class XsenseApi {
             result = "{\"reCode\": 401, \"reMsg\":\"" + e.getMessage() + "\"}";
         }
 
+        sessionLock.unlock();
         return new BaseResponse(type, result);
     }
 
@@ -220,15 +226,39 @@ public class XsenseApi {
     }
 
     private void authenticate() throws Exception {
-        ClientInfo data = getClientInfo();
-        region = data.region;
-        clientId = data.clientId;
-        clientSecret = decodeClientSecret(data.clientSecret);
+        HashMap<String, String> result = null;
 
-        authentication = new Authentication(region, data.userPoolId, clientId, clientSecret);
-        HashMap<String, String> result = authentication.PerformSRPAuthentication(username, password);
-        if (!parseAuthenticationResult(result)) {
-            logger.warn("parsing authentication result for srp failed: {}", result.toString());
+        if (authentication == null) {
+            ClientInfo data = getClientInfo();
+            userRegion = data.getUserRegion();
+            clientId = data.getClientId();
+            clientSecret = decodeClientSecret(data.getClientSecret());
+
+            authentication = new Authentication(userRegion, data.getUserPoolId(), clientId, clientSecret);
+            result = authentication.performSRPAuthentication(username, password);
+        } else {
+            result = authentication.performRefreshAuthentication(refreshToken);
+        }
+
+        if (parseAuthenticationResult(result)) {
+            logger.debug("cognito session expires at {}", Instant.ofEpochMilli(System.currentTimeMillis() + expiresIn)
+                    .atZone(ZoneId.systemDefault()).toLocalDateTime());
+
+            refreshCognitoSession = scheduler.schedule(new Runnable() {
+                public void run() {
+                    sessionLock.lock();
+                    logger.debug("refresh cognito session");
+                    try {
+                        authenticate();
+                        sessionLock.unlock();
+                    } catch (Exception e) {
+                        logger.warn("failed to refresh cognito sesseion", e);
+                        sessionLock.unlock();
+                    }
+                }
+            }, expiresIn - TimeUnit.MINUTES.toMillis(5), TimeUnit.MILLISECONDS);
+        } else {
+            logger.warn("parsing authentication result failed: {}", result.toString());
         }
     }
 
@@ -236,6 +266,19 @@ public class XsenseApi {
         try {
             Regions regions = getRegions();
             OAuth oAuth = getOAuth(username);
+
+            logger.debug("oauth credentials expires at {}",
+                    Instant.ofEpochMilli(System.currentTimeMillis() + oAuth.getExpiresIn())
+                            .atZone(ZoneId.systemDefault()).toLocalDateTime());
+
+            refreshOAuthSession = scheduler.schedule(new Runnable() {
+                public void run() {
+                    sessionLock.lock();
+                    logger.debug("refresh oAuth session");
+                    connectMqtt();
+                    sessionLock.unlock();
+                }
+            }, oAuth.getExpiresIn() - TimeUnit.MINUTES.toMillis(5), TimeUnit.MILLISECONDS);
 
             regions.getRegions().forEach(item -> {
                 Region region = (Region) item;
@@ -254,12 +297,31 @@ public class XsenseApi {
     }
 
     public void logout() {
+        if (refreshCognitoSession != null) {
+            sessionLock.lock();
+            refreshCognitoSession.cancel(true);
+            sessionLock.unlock();
+        }
+
+        if (refreshOAuthSession != null) {
+            sessionLock.lock();
+            refreshOAuthSession.cancel(true);
+            sessionLock.unlock();
+        }
+
         // disconnect mqtt clients and clean them up
         mqttClients.values().forEach(item -> {
             Mqtt mqttClient = (Mqtt) item;
             mqttClient.disconnect(true);
         });
         mqttClients.clear();
+
+        // global signout of currently used accesstoken
+        if (authentication != null && !accessToken.isEmpty()) {
+            if (authentication.signOutUser(accessToken)) {
+                logger.debug("signed out user {}", userId);
+            }
+        }
     }
 
     public Houses getHouses() throws Exception {
@@ -301,7 +363,7 @@ public class XsenseApi {
                     ((Station) device).setStationStatus(status.getStationStatus());
 
                     for (SensorStatus sensorStatus : status.getSensorStatus()) {
-                        Sensor sensor = (Sensor) ((Station) device).getSensor(sensorStatus.serialnumber);
+                        Sensor sensor = (Sensor) ((Station) device).getSensor(sensorStatus.getSerialnumber());
                         sensor.setSensorStatus(sensorStatus);
                     }
                 } else {
@@ -334,11 +396,11 @@ public class XsenseApi {
         return response.getReturnCode() == 200;
     }
 
-    private boolean registerThingUpdateListener(String mqttRegion, Subscription subscription, EventListener listener) {
+    private boolean registerEventListener(String mqttRegion, Subscription subscription, EventListener listener) {
         Mqtt mqttClient = mqttClients.get(mqttRegion);
 
         if (mqttClient != null) {
-            return mqttClient.registerThingUpdateListener(subscription, listener);
+            return mqttClient.registerEventListener(subscription, listener);
         } else {
             logger.warn("failed to get mqttclient for region {}", mqttRegion);
         }
@@ -346,15 +408,15 @@ public class XsenseApi {
         return false;
     }
 
-    public boolean registerThingUpdateListener(String mqttRegion, SubscriptionTopics topic, EventListener listener) {
+    public boolean registerEventListener(String mqttRegion, SubscriptionTopics topic, EventListener listener) {
         String t = topic.toString().replace("{userId}", userId);
 
         Subscription subscription = new Subscription(topic.getDataClass(), t);
 
-        return registerThingUpdateListener(mqttRegion, subscription, listener);
+        return registerEventListener(mqttRegion, subscription, listener);
     }
 
-    public boolean registerThingUpdateListener(String houseId, String thing, SubscriptionTopics topic,
+    public boolean registerEventListener(String houseId, String thing, SubscriptionTopics topic,
             EventListener listener) {
         House house = houses.getHouse(houseId);
         if (house != null) {
@@ -362,7 +424,7 @@ public class XsenseApi {
 
             Subscription subscription = new Subscription(topic.getDataClass(), t);
 
-            registerThingUpdateListener(house.getMqttRegion(), subscription, listener);
+            registerEventListener(house.getMqttRegion(), subscription, listener);
         } else {
             logger.warn("failed to get house with id {}", houseId);
         }
@@ -370,9 +432,17 @@ public class XsenseApi {
         return false;
     }
 
-    public void unregisterThingUpdateListener(EventListener listener) {
+    public void unregisterEventListener(EventListener listener) {
         for (Mqtt mqtt : mqttClients.values()) {
-            mqtt.unregisterThingUpdateListener(listener);
+            mqtt.unregisterEventListener(listener);
         }
+    }
+
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public String getUserRegion() {
+        return userRegion;
     }
 }

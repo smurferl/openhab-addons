@@ -21,18 +21,34 @@ import org.openhab.binding.xsense.internal.api.data.base.BaseData;
  * @author Jakob Fellner - Initial contribution
  */
 public class ClientInfo extends BaseData {
-    public String region = "";
-    public String clientId = "";
-    public String clientSecret = "";
-    public String userPoolId = "";
+    private String userRegion = "";
+    private String clientId = "";
+    private String clientSecret = "";
+    private String userPoolId = "";
 
     @Override
     public void deserialize(String input) {
         JSONObject obj = new JSONObject(input);
 
-        region = obj.getJSONObject("reData").getString("cgtRegion");
+        userRegion = obj.getJSONObject("reData").getString("cgtRegion");
         clientId = obj.getJSONObject("reData").getString("clientId");
         clientSecret = obj.getJSONObject("reData").getString("clientSecret");
         userPoolId = obj.getJSONObject("reData").getString("userPoolId");
+    }
+
+    public String getUserRegion() {
+        return userRegion;
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public String getClientSecret() {
+        return clientSecret;
+    }
+
+    public String getUserPoolId() {
+        return userPoolId;
     }
 }

@@ -26,4 +26,6 @@ public interface EventListener {
     void eventReceived(BaseEvent event);
 
     String getEventIdentifier();
+
+    void updateEventConnectionStatus(boolean connectionFailed);
 }

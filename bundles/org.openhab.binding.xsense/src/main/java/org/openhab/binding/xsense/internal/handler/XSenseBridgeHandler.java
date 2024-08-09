@@ -33,7 +33,7 @@ import org.openhab.binding.xsense.internal.api.data.Devices.Sensor;
 import org.openhab.binding.xsense.internal.api.data.Devices.Station;
 import org.openhab.binding.xsense.internal.api.data.Houses;
 import org.openhab.binding.xsense.internal.api.data.base.BaseEvent;
-import org.openhab.binding.xsense.internal.api.data.events.ForceLogout.ForceLogoutEvent;
+import org.openhab.binding.xsense.internal.api.data.events.Login.LoginEvent;
 import org.openhab.binding.xsense.internal.config.XSenseConfiguration;
 import org.openhab.binding.xsense.internal.discovery.XSenseDiscoveryService;
 import org.openhab.core.thing.Bridge;
@@ -69,13 +69,6 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
     @Override
     public Collection<Class<? extends ThingHandlerService>> getServices() {
         return Collections.singleton(XSenseDiscoveryService.class);
-    }
-
-    private void cleanup() {
-        deviceListeners.clear();
-        if (api != null) {
-            api.logout();
-        }
     }
 
     @SuppressWarnings("null")
@@ -155,7 +148,7 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
             if (api != null) {
                 try {
                     api.login();
-                    api.registerThingUpdateListener("us-east-1", SubscriptionTopics.LOGIN, this);
+                    api.registerEventListener(api.getUserRegion(), SubscriptionTopics.LOGIN, this);
                     thingReachable = true;
                 } catch (Exception e) {
                     error = e.getMessage();
@@ -181,7 +174,10 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
     @Override
     public void dispose() {
         stopStatePolling();
-        cleanup();
+        deviceListeners.clear();
+        if (api != null) {
+            api.logout();
+        }
     }
 
     public List<Device> getFullDevices() {
@@ -329,20 +325,20 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
         return false;
     }
 
-    public boolean registerThingUpdateListener(String houseId, String thingName, SubscriptionTopics topic,
+    public boolean registerEventListener(String houseId, String thingName, SubscriptionTopics topic,
             EventListener listener) {
         if (thing.getStatus() == ThingStatus.ONLINE) {
             if (api != null) {
-                return api.registerThingUpdateListener(houseId, thingName, topic, listener);
+                return api.registerEventListener(houseId, thingName, topic, listener);
             }
         }
 
         return false;
     }
 
-    public boolean unregisterThingUpdateListener(EventListener listener) {
+    public boolean unregisterEventListener(EventListener listener) {
         if (api != null) {
-            api.unregisterThingUpdateListener(listener);
+            api.unregisterEventListener(listener);
             return true;
         }
 
@@ -351,17 +347,24 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
 
     @Override
     public void eventReceived(BaseEvent event) {
-        if (event instanceof ForceLogoutEvent) {
-            ForceLogoutEvent forceLogout = (ForceLogoutEvent) event;
+        if (event instanceof LoginEvent) {
+            LoginEvent forceLogout = (LoginEvent) event;
 
-            stopStatePolling();
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "another device logged in");
+            if (api != null) {
+                if (!api.getAccessToken().equals(forceLogout.getAccessToken())) {
+                    logger.warn("force logout for userid {}", forceLogout.getUserId());
 
-            scheduler.schedule(() -> {
-                cleanup();
-            }, 500, TimeUnit.MILLISECONDS);
+                    stopStatePolling();
 
-            logger.warn("force logout for userid {}", forceLogout.getUserId());
+                    scheduler.schedule(() -> {
+                        if (api != null) {
+                            api.logout();
+                            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                                    "another device logged in");
+                        }
+                    }, 0, TimeUnit.MILLISECONDS);
+                }
+            }
         } else {
             logger.warn("unknown subscriptiondata type received {}", event.getClass().toString());
         }
@@ -370,5 +373,19 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
     @Override
     public String getEventIdentifier() {
         return "";
+    }
+
+    @Override
+    public void updateEventConnectionStatus(boolean connectionFailed) {
+        if (connectionFailed) {
+            if (thing.getStatus() == ThingStatus.ONLINE) {
+                logger.warn("eventconnection failed");
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "eventconnection interrupted");
+            }
+        } else {
+            if (thing.getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+            }
+        }
     }
 }

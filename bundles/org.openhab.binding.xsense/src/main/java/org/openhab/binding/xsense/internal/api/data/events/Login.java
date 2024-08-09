@@ -19,18 +19,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link ForceLogout} represents reply in case another device logs in with same credentials as used by the binding
+ * The {@link Login} represents reply in case another device logs in with same credentials as used by the binding
  *
  * @author Jakob Fellner - Initial contribution
  */
-public class ForceLogout extends BaseSubscriptionMessage {
-    private final Logger logger = LoggerFactory.getLogger(ForceLogout.class);
+public class Login extends BaseSubscriptionMessage {
+    private final Logger logger = LoggerFactory.getLogger(Login.class);
 
-    public class ForceLogoutEvent extends BaseEvent {
+    public class LoginEvent extends BaseEvent {
         private String accessToken = "";
         private String userId = "";
 
-        public ForceLogoutEvent(String identifier, String accessToken, String userId) {
+        public LoginEvent(String identifier, String accessToken, String userId) {
             super(identifier);
 
             this.accessToken = accessToken;
@@ -51,7 +51,7 @@ public class ForceLogout extends BaseSubscriptionMessage {
         JSONObject obj = new JSONObject(input);
 
         if (obj.has("accessToken") && obj.has("userId")) {
-            addEvent("", new ForceLogoutEvent("", obj.getString("accessToken"), obj.getString("userId")));
+            addEvent("", new LoginEvent("", obj.getString("accessToken"), obj.getString("userId")));
         } else {
             logger.error("invalid additionalLogin reply {}", obj.toString());
         }

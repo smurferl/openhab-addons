@@ -23,6 +23,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.json.JSONObject;
+import org.openhab.binding.xsense.internal.api.ApiConstants;
 import org.openhab.binding.xsense.internal.api.ApiConstants.ShadowRequestType;
 import org.openhab.binding.xsense.internal.api.EventListener;
 import org.openhab.binding.xsense.internal.api.data.OAuth;
@@ -70,6 +71,7 @@ public class Mqtt implements MqttClientConnectionEvents {
 
     private String clientId = "";
     private String host = "";
+    private int port = 0;
     private String region = "";
 
     private final Lock lock = new ReentrantLock(true);
@@ -86,76 +88,27 @@ public class Mqtt implements MqttClientConnectionEvents {
 
     public boolean connect(OAuth oAuth) {
         boolean success = false;
-        boolean reconnect = false;
 
         if (client != null) {
             disconnect(false);
-            // direct subscriptions, starting with $aws are kept to resubscribe after reconnect/sessiontimeout
-            subscribedTopics.removeIf(t -> !t.startsWith("$aws"));
-            reconnect = true;
             logger.debug("reconnect to mqtt host for region {}", region);
         } else {
             subscribedTopics.clear();
         }
 
-        client = createMqttClientConnection(oAuth.accessKeyId, oAuth.secretAccessKey, oAuth.sessionToken, clientId,
-                host, region);
+        client = createMqttClientConnection(oAuth.getAccessKeyId(), oAuth.getSecretAccessKey(), oAuth.getSessionToken(),
+                clientId, host, region);
 
         if (client != null) {
             CompletableFuture<Boolean> connected = client.connect();
             try {
                 connected.get();
 
-                if (reconnect) {
-                    if (!resubscribe()) {
-                        logger.warn("resubscription failed for at least one topic");
-                    }
+                if (!resubscribe()) {
+                    logger.warn("resubscription failed for at least one topic");
                 }
 
                 success = true;
-                // JSONObject v;
-                // selftest
-                /*
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_selftestup/update");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_selftest_00000004/update/accepted");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_selftest_00000004/update/rejected");
-                 * v = new JSONObject(
-                 * "{\"state\":{\"desired\":{\"deviceSN\":\"00000004\",\"shadow\":\"appSelfTest\",\"stationSN\":\"139A1F89\",\"time\":\"1717165906724\",\"userId\":\"c05d6905-2b22-4bd9-ad92-61de5d1191b9\"}}}"
-                 * );
-                 * publish("$aws/things/SBS50139A1F89/shadow/name/2nd_selftest_00000004/update", v.toString());
-                 */
-
-                // mute key basestation
-                /*
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_mutekeyup/update");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_mutekey/update/accepted");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_mutekey/update/rejected");
-                 * v = new JSONObject(
-                 * "{\"state\":{\"desired\":{\"muteKeyEnable\":\"1\",\"shadow\":\"muteKey\",\"stationSN\":\"139A1F89\",\"time\":\"20240531151041\",\"userId\":\"c05d6905-2b22-4bd9-ad92-61de5d1191b9\"}}}"
-                 * );
-                 * publish("$aws/things/SBS50139A1F89/shadow/name/2nd_mutekey/update", v.toString());
-                 */
-
-                // things infos
-                /*
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_mainpage/get/accepted");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_mainpage/get/rejected");
-                 * publish("$aws/things/SBS50139A1F89/shadow/name/2nd_mainpage/get", "");
-                 */
-
-                // basestation infos
-                /*
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_info_139A1F89/get/accepted");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_info_139A1F89/get/rejected");
-                 * publish("$aws/things/SBS50139A1F89/shadow/name/2nd_info_139A1F89/get", "");
-                 */
-
-                // device infos
-                /*
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_info_00000001/get/accepted");
-                 * subscribe("$aws/things/SBS50139A1F89/shadow/name/2nd_info_00000001/get/rejected");
-                 * publish("$aws/things/SBS50139A1F89/shadow/name/2nd_info_00000001/get", "");
-                 */
             } catch (Exception e) {
                 logger.error("failed connect to mqtt broker", e);
             }
@@ -172,14 +125,6 @@ public class Mqtt implements MqttClientConnectionEvents {
 
             if (clearListeners) {
                 updateListeners.clear();
-
-                /*
-                 * HashSet<String> unsubscribeTopics = subscribedTopics;
-                 * unsubscribeTopics.forEach(topic -> {
-                 * unsubscribe(topic);
-                 * });
-                 * logger.debug("subscribed topics {}", subscribedTopics.size());
-                 */
             }
 
             CompletableFuture<Void> disconnected = client.disconnect();
@@ -188,6 +133,7 @@ public class Mqtt implements MqttClientConnectionEvents {
             openRequests.values().forEach(request -> {
                 request.completeRequest("{\"reCode\": 402, \"reMsg\":\"mqtt disconnected\"}");
             });
+
             openRequests.clear();
         } catch (InterruptedException | ExecutionException e) {
             logger.error("failed to disconnect mqtt connection", e);
@@ -197,20 +143,26 @@ public class Mqtt implements MqttClientConnectionEvents {
     private MqttClientConnection createMqttClientConnection(String accessKey, String secretAccessKey,
             String sessionToken, String clientId, String host, String region) {
 
-        HttpProxyOptions proxyOptions = new HttpProxyOptions();
-        proxyOptions.setConnectionType(HttpProxyConnectionType.Tunneling);
-        proxyOptions.setHost("192.168.1.151");
-        proxyOptions.setPort(8888);
-
         StaticCredentialsProviderBuilder providerBuilder = new StaticCredentialsProviderBuilder();
         providerBuilder.withAccessKeyId(accessKey.getBytes());
         providerBuilder.withSecretAccessKey(secretAccessKey.getBytes());
         providerBuilder.withSessionToken(sessionToken.getBytes());
 
-        return AwsIotMqttConnectionBuilder.newMtlsBuilderFromPath(null, null).withConnectionEventCallbacks(this)
-                .withEndpoint(host).withClientId(clientId).withWebsocketSigningRegion(region).withWebsockets(true)
-                .withPort(443).withHttpProxyOptions(proxyOptions)
-                .withWebsocketCredentialsProvider(providerBuilder.build()).withKeepAliveSecs(30).build();
+        AwsIotMqttConnectionBuilder iotMqttConnectionBuilder = AwsIotMqttConnectionBuilder
+                .newMtlsBuilderFromPath(null, null).withConnectionEventCallbacks(this).withEndpoint(host)
+                .withClientId(clientId).withWebsocketSigningRegion(region).withWebsockets(true).withPort(443)
+                .withWebsocketCredentialsProvider(providerBuilder.build()).withKeepAliveSecs(30);
+
+        if (!ApiConstants.DEBUG_PROXY_IP.isEmpty()) {
+            HttpProxyOptions proxyOptions = new HttpProxyOptions();
+            proxyOptions.setConnectionType(HttpProxyConnectionType.Tunneling);
+            proxyOptions.setHost(ApiConstants.DEBUG_PROXY_IP);
+            proxyOptions.setPort(ApiConstants.DEBUG_PROXY_PORT);
+
+            iotMqttConnectionBuilder = iotMqttConnectionBuilder.withHttpProxyOptions(proxyOptions);
+        }
+
+        return iotMqttConnectionBuilder.build();
     }
 
     public void sendRequest(BaseMqttRequest<?> request) {
@@ -244,7 +196,7 @@ public class Mqtt implements MqttClientConnectionEvents {
         }
     }
 
-    public boolean registerThingUpdateListener(Subscription subscription, EventListener listener) {
+    public boolean registerEventListener(Subscription subscription, EventListener listener) {
         String topic = subscription.getTopic();
 
         if (subscribe(topic)) {
@@ -267,7 +219,7 @@ public class Mqtt implements MqttClientConnectionEvents {
         return false;
     }
 
-    public void unregisterThingUpdateListener(EventListener listener) {
+    public void unregisterEventListener(EventListener listener) {
         lock.lock();
         ArrayList<Subscription> keysToRemove = new ArrayList<>();
         updateListeners.keySet().forEach(subscription -> {
@@ -383,17 +335,22 @@ public class Mqtt implements MqttClientConnectionEvents {
 
         HashSet<String> resubscribedTopics = new HashSet<>();
 
-        for (String topic : subscribedTopics) {
-            if (topic.startsWith("$aws")) {
-                resubscribedTopics.add(topic);
+        if (!subscribedTopics.isEmpty()) {
+            for (String topic : subscribedTopics) {
+                if (topic.startsWith("$aws") || topic.startsWith("@claybox")) {
+                    resubscribedTopics.add(topic);
+                }
             }
-        }
 
-        for (String topic : resubscribedTopics) {
-            subscribedTopics.remove(topic);
-            if (!subscribe(topic)) {
-                success = false;
+            subscribedTopics.clear();
+
+            for (String topic : resubscribedTopics) {
+                if (!subscribe(topic)) {
+                    success = false;
+                }
             }
+        } else {
+            logger.debug("no topics to resubscribe");
         }
 
         return success;
@@ -403,6 +360,14 @@ public class Mqtt implements MqttClientConnectionEvents {
     public void onConnectionSuccess(OnConnectionSuccessReturn data) {
         shadow = new IotShadowClient(client);
         logger.debug("connect to mqtt successful for region {}", region);
+
+        CompletableFuture.runAsync(() -> {
+            updateListeners.values().forEach(listeners -> {
+                ((ArrayList<EventListener>) listeners).forEach(listener -> {
+                    ((EventListener) listener).updateEventConnectionStatus(false);
+                });
+            });
+        });
     }
 
     @Override
@@ -416,10 +381,6 @@ public class Mqtt implements MqttClientConnectionEvents {
         logger.debug("mqtt connection closed for region {}", region);
 
         shadow = null;
-
-        clientId = "";
-        host = "";
-        region = "";
     }
 
     @Override
@@ -432,13 +393,29 @@ public class Mqtt implements MqttClientConnectionEvents {
                 request.completeRequest("{\"reCode\": 402, \"reMsg\":\"mqtt interrupted\"}");
             });
             openRequests.clear();
+
+            CompletableFuture.runAsync(() -> {
+                updateListeners.values().forEach(listeners -> {
+                    ((ArrayList<EventListener>) listeners).forEach(listener -> {
+                        ((EventListener) listener).updateEventConnectionStatus(true);
+                    });
+                });
+            });
         }
     }
 
     @Override
     public void onConnectionResumed(boolean sessionPresent) {
-        logger.debug("mqtt connection for region {} resumed: {}", region,
+        logger.info("mqtt connection for region {} resumed: {}", region,
                 sessionPresent ? "existing session" : "clean session");
+
+        if (!sessionPresent) {
+            CompletableFuture.runAsync(() -> {
+                if (!resubscribe()) {
+                    logger.warn("resubscription failed for at least one topic");
+                }
+            });
+        }
     }
 
     private void onGetShadowAccepted(GetShadowResponse response) {

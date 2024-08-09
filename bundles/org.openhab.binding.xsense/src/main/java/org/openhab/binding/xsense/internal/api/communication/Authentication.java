@@ -46,6 +46,7 @@ import com.amazonaws.services.cognitoidp.model.AuthenticationResultType;
 import com.amazonaws.services.cognitoidp.model.ChallengeNameType;
 import com.amazonaws.services.cognitoidp.model.GetUserRequest;
 import com.amazonaws.services.cognitoidp.model.GetUserResult;
+import com.amazonaws.services.cognitoidp.model.GlobalSignOutRequest;
 import com.amazonaws.services.cognitoidp.model.InitiateAuthRequest;
 import com.amazonaws.services.cognitoidp.model.InitiateAuthResult;
 import com.amazonaws.services.cognitoidp.model.RespondToAuthChallengeRequest;
@@ -165,7 +166,7 @@ public class Authentication {
      * @param password Password for the SRP request
      * @return the JWT token if the request is successful else null.
      */
-    public HashMap<String, String> PerformSRPAuthentication(String username, String password) throws Exception {
+    public HashMap<String, String> performSRPAuthentication(String username, String password) throws Exception {
         HashMap<String, String> authResult = new HashMap<>();
 
         InitiateAuthRequest initiateAuthRequest = initiateUserSrpAuthRequest(username);
@@ -199,7 +200,7 @@ public class Authentication {
         return authResult;
     }
 
-    public HashMap<String, String> PerformRefreshAuthentication(String refreshToken) {
+    public HashMap<String, String> performRefreshAuthentication(String refreshToken) {
         HashMap<String, String> authResult = new HashMap<>();
 
         InitiateAuthRequest initiateAuthRequest = new InitiateAuthRequest();
@@ -229,7 +230,7 @@ public class Authentication {
 
         for (AttributeType attribute : getUserResult.getUserAttributes()) {
             if (attribute.getName().equals("sub")) {
-                authResult.put("sub", attribute.getValue());
+                authResult.put("userId", attribute.getValue());
             }
         }
 
@@ -238,6 +239,24 @@ public class Authentication {
         authResult.put("exiresIn", Integer.toString(result.getExpiresIn()));
 
         return authResult;
+    }
+
+    public boolean signOutUser(String accessToken) {
+        try {
+            GlobalSignOutRequest globalSignOutRequest = new GlobalSignOutRequest();
+            globalSignOutRequest.setAccessToken(accessToken);
+
+            AnonymousAWSCredentials awsCreds = new AnonymousAWSCredentials();
+            AWSCognitoIdentityProvider cognitoIdentityProvider = AWSCognitoIdentityProviderClientBuilder.standard()
+                    .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+                    .withRegion(Regions.fromName(this.region)).build();
+
+            cognitoIdentityProvider.globalSignOut(globalSignOutRequest);
+            return true;
+        } catch (Exception e) {
+            logger.warn("failed to sign out {}", e.getMessage());
+            return false;
+        }
     }
 
     /**

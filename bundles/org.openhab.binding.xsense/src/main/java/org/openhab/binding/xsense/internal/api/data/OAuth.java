@@ -12,8 +12,13 @@
  */
 package org.openhab.binding.xsense.internal.api.data;
 
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+
 import org.json.JSONObject;
 import org.openhab.binding.xsense.internal.api.data.base.BaseData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link OAuth} represents all data relevant, received by the oauth request. contained information is needed for
@@ -22,18 +27,50 @@ import org.openhab.binding.xsense.internal.api.data.base.BaseData;
  * @author Jakob Fellner - Initial contribution
  */
 public class OAuth extends BaseData {
-    public String accessKeyId = "";
-    public String expiration = "";
-    public String secretAccessKey = "";
-    public String sessionToken = "";
+    private String accessKeyId = "";
+    private long expiresIn = 0;
+    private String secretAccessKey = "";
+    private String sessionToken = "";
+    private final Logger logger = LoggerFactory.getLogger(OAuth.class);
+
+    public String getAccessKeyId() {
+        return accessKeyId;
+    }
+
+    public long getExpiresIn() {
+        return expiresIn;
+    }
+
+    public String getSecretAccessKey() {
+        return secretAccessKey;
+    }
+
+    public String getSessionToken() {
+        return sessionToken;
+    }
 
     @Override
     public void deserialize(String input) {
         JSONObject obj = new JSONObject(input);
 
-        accessKeyId = obj.getJSONObject("reData").getString("accessKeyId");
-        expiration = obj.getJSONObject("reData").getString("expiration");
-        secretAccessKey = obj.getJSONObject("reData").getString("secretAccessKey");
-        sessionToken = obj.getJSONObject("reData").getString("sessionToken");
+        if (obj.has("reData")) {
+            JSONObject response = obj.getJSONObject("reData");
+
+            if (response.has("accessKeyId") && response.has("secretAccessKey") && response.has("sessionToken")
+                    && response.has("expiration")) {
+                accessKeyId = response.getString("accessKeyId");
+                secretAccessKey = response.getString("secretAccessKey");
+                sessionToken = response.getString("sessionToken");
+
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ssZZZZZ");
+                ZonedDateTime expiresAt = ZonedDateTime.parse(response.getString("expiration"), formatter);
+
+                expiresIn = expiresAt.toInstant().toEpochMilli() - System.currentTimeMillis();
+            } else {
+                logger.error("invalid authdata {}", response.toString());
+            }
+        } else {
+            logger.error("no responseData found", obj.toString());
+        }
     }
 }
