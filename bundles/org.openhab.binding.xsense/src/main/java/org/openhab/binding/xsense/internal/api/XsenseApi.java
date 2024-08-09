@@ -101,7 +101,7 @@ public class XsenseApi {
 
     public XsenseApi(String username, String password) {
         Builder httpClientBuilder = HttpClient.newBuilder();
-        if (ApiConstants.DEBUG_PROXY_IP.isEmpty()) {
+        if (!ApiConstants.DEBUG_PROXY_IP.isEmpty()) {
             httpClientBuilder = httpClientBuilder.proxy(ProxySelector
                     .of(new InetSocketAddress(ApiConstants.DEBUG_PROXY_IP, ApiConstants.DEBUG_PROXY_PORT)));
         }
