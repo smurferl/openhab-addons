@@ -33,7 +33,6 @@ import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
@@ -157,14 +156,16 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
     public void onUpdateDevice(Device device) {
         Sensor sensor = (Sensor) device;
 
-        if (sensor.getSensorStatus().isOnline()) {
-            updateStatus(ThingStatus.ONLINE);
-        } else {
-            updateStatus(ThingStatus.OFFLINE);
-        }
+        if (sensor.getSensorStatus() != null) {
+            if (sensor.getSensorStatus().isOnline()) {
+                updateStatus(ThingStatus.ONLINE);
+            } else {
+                updateStatus(ThingStatus.OFFLINE);
+            }
 
-        updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(sensor.getSensorStatus().getConnectionQuality()));
-        updateState(CHANNEL_BATTERY_LEVEL, new DecimalType(sensor.getSensorStatus().getBattery()));
+            updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(sensor.getSensorStatus().getConnectionQuality()));
+            updateState(CHANNEL_BATTERY_LEVEL, new DecimalType(sensor.getSensorStatus().getBattery()));
+        }
     }
 
     @Override
@@ -228,19 +229,5 @@ public class XSenseSensorHandler extends BaseThingHandler implements DeviceListe
         }
 
         return thingName;
-    }
-
-    @Override
-    public void updateEventConnectionStatus(boolean connectionFailed) {
-        if (connectionFailed) {
-            if (thing.getStatus() == ThingStatus.ONLINE) {
-                logger.warn("eventconnection failed");
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "eventconnection interrupted");
-            }
-        } else {
-            if (thing.getStatus() != ThingStatus.ONLINE) {
-                updateStatus(ThingStatus.ONLINE);
-            }
-        }
     }
 }

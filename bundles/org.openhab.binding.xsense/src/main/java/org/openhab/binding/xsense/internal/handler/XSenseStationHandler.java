@@ -124,7 +124,9 @@ public class XSenseStationHandler extends BaseThingHandler implements DeviceList
             updateStatus(ThingStatus.OFFLINE);
         }
 
-        updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(station.getStationStatus().getConnectionQuality()));
+        if (station.getStationStatus() != null) {
+            updateState(CHANNEL_SIGNAL_STRENGTH, new DecimalType(station.getStationStatus().getConnectionQuality()));
+        }
     }
 
     @Override

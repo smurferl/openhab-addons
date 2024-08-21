@@ -103,7 +103,7 @@ public class XsenseApi {
         Builder httpClientBuilder = HttpClient.newBuilder();
         if (!ApiConstants.DEBUG_PROXY_IP.isEmpty()) {
             httpClientBuilder = httpClientBuilder.proxy(ProxySelector
-                    .of(new InetSocketAddress(ApiConstants.DEBUG_PROXY_IP, ApiConstants.DEBUG_PROXY_PORT)));
+            .of(new InetSocketAddress(ApiConstants.DEBUG_PROXY_IP, ApiConstants.DEBUG_PROXY_PORT)));
         }
 
         apiClient = httpClientBuilder.build();
@@ -250,9 +250,9 @@ public class XsenseApi {
                     logger.debug("refresh cognito session");
                     try {
                         authenticate();
-                        sessionLock.unlock();
                     } catch (Exception e) {
                         logger.warn("failed to refresh cognito sesseion", e);
+                    } finally {
                         sessionLock.unlock();
                     }
                 }
@@ -289,7 +289,7 @@ public class XsenseApi {
                     mqttClients.put(region.getMqttRegion(), mqttClient);
                 }
 
-                mqttClient.connect(oAuth);
+                mqttClient.updateAuthenticationParameters(oAuth);
             });
         } catch (Exception e) {
             logger.error("failed to connect mqtt", e);
@@ -438,8 +438,8 @@ public class XsenseApi {
         }
     }
 
-    public String getAccessToken() {
-        return accessToken;
+    public boolean matchCurrentToken(String accessToken) {
+        return accessToken.equals(this.accessToken);
     }
 
     public String getUserRegion() {

@@ -189,11 +189,11 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
                     try {
                         ret.addAll(api.getDevices(item.getHouseId()).toList());
                     } catch (Exception e) {
-                        logger.warn("getDevices failed {}", e.getMessage(), e);
+                        logger.warn("getDevices failed {}", e.getMessage());
                     }
                 });
             } catch (Exception e) {
-                logger.warn("getHouses failed {}", e.getMessage(), e);
+                logger.warn("getHouses failed {}", e.getMessage());
             }
         } else {
             logger.warn("uninitialized api handler");
@@ -348,11 +348,11 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
     @Override
     public void eventReceived(BaseEvent event) {
         if (event instanceof LoginEvent) {
-            LoginEvent forceLogout = (LoginEvent) event;
+            LoginEvent loginEvent = (LoginEvent) event;
 
             if (api != null) {
-                if (!api.getAccessToken().equals(forceLogout.getAccessToken())) {
-                    logger.warn("force logout for userid {}", forceLogout.getUserId());
+                if (!api.matchCurrentToken(loginEvent.getAccessToken())) {
+                    logger.warn("force logout for userid {}", loginEvent.getUserId());
 
                     stopStatePolling();
 
@@ -373,19 +373,5 @@ public class XSenseBridgeHandler extends BaseBridgeHandler implements EventListe
     @Override
     public String getEventIdentifier() {
         return "";
-    }
-
-    @Override
-    public void updateEventConnectionStatus(boolean connectionFailed) {
-        if (connectionFailed) {
-            if (thing.getStatus() == ThingStatus.ONLINE) {
-                logger.warn("eventconnection failed");
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "eventconnection interrupted");
-            }
-        } else {
-            if (thing.getStatus() != ThingStatus.ONLINE) {
-                updateStatus(ThingStatus.ONLINE);
-            }
-        }
     }
 }

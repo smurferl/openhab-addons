@@ -69,12 +69,13 @@ public class Mqtt implements MqttClientConnectionEvents {
     private HashMap<Subscription, ArrayList<EventListener>> updateListeners;
     private HashSet<String> subscribedTopics;
 
+    private OAuth authenticationParameters = null;
     private String clientId = "";
     private String host = "";
-    private int port = 0;
     private String region = "";
 
-    private final Lock lock = new ReentrantLock(true);
+    private final Lock subscriptionLock = new ReentrantLock(true);
+    private final Lock connectionLock = new ReentrantLock(true);
 
     public Mqtt(String clientId, String host, String region) {
         openRequests = new HashMap<>();
@@ -86,34 +87,52 @@ public class Mqtt implements MqttClientConnectionEvents {
         this.region = region;
     }
 
-    public boolean connect(OAuth oAuth) {
+    public void updateAuthenticationParameters(OAuth oAuth) {
+        authenticationParameters = oAuth;
+
+        // reconnect in case connection is already established
+        if (client != null) {
+            connect();
+        }
+    }
+
+    private boolean connect() {
         boolean success = false;
 
-        if (client != null) {
-            disconnect(false);
-            logger.debug("reconnect to mqtt host for region {}", region);
-        } else {
-            subscribedTopics.clear();
-        }
-
-        client = createMqttClientConnection(oAuth.getAccessKeyId(), oAuth.getSecretAccessKey(), oAuth.getSessionToken(),
-                clientId, host, region);
-
-        if (client != null) {
-            CompletableFuture<Boolean> connected = client.connect();
-            try {
-                connected.get();
-
-                if (!resubscribe()) {
-                    logger.warn("resubscription failed for at least one topic");
-                }
-
-                success = true;
-            } catch (Exception e) {
-                logger.error("failed connect to mqtt broker", e);
+        if (connectionLock.tryLock()) {
+            if (client != null) {
+                disconnect(false);
+                logger.debug("reconnect to mqtt host for region {}", region);
+            } else {
+                subscribedTopics.clear();
             }
+
+            client = createMqttClientConnection(authenticationParameters.getAccessKeyId(),
+                    authenticationParameters.getSecretAccessKey(), authenticationParameters.getSessionToken(), clientId,
+                    host, region);
+
+            if (client != null) {
+                CompletableFuture<Boolean> connected = client.connect();
+                try {
+                    connected.get();
+
+                    if (!resubscribe()) {
+                        logger.warn("resubscription failed for at least one topic");
+                    }
+
+                    success = true;
+                } catch (Exception e) {
+                    logger.error("failed connect to mqtt broker", e);
+                }
+            } else {
+                logger.error("failed to create mqtt connection");
+            }
+
+            connectionLock.unlock();
         } else {
-            logger.error("failed to create mqtt connection");
+            connectionLock.lock();
+            success = true;
+            connectionLock.unlock();
         }
 
         return success;
@@ -121,20 +140,22 @@ public class Mqtt implements MqttClientConnectionEvents {
 
     public void disconnect(boolean clearListeners) {
         try {
-            logger.debug("disconnecting mqtt connection for region {}", region);
+            if (client != null) {
+                logger.debug("disconnecting mqtt connection for region {}", region);
 
-            if (clearListeners) {
-                updateListeners.clear();
+                if (clearListeners) {
+                    updateListeners.clear();
+                }
+
+                CompletableFuture<Void> disconnected = client.disconnect();
+                disconnected.get();
+
+                openRequests.values().forEach(request -> {
+                    request.completeRequest("{\"reCode\": 402, \"reMsg\":\"mqtt disconnected\"}");
+                });
+
+                openRequests.clear();
             }
-
-            CompletableFuture<Void> disconnected = client.disconnect();
-            disconnected.get();
-
-            openRequests.values().forEach(request -> {
-                request.completeRequest("{\"reCode\": 402, \"reMsg\":\"mqtt disconnected\"}");
-            });
-
-            openRequests.clear();
         } catch (InterruptedException | ExecutionException e) {
             logger.error("failed to disconnect mqtt connection", e);
         }
@@ -166,61 +187,81 @@ public class Mqtt implements MqttClientConnectionEvents {
     }
 
     public void sendRequest(BaseMqttRequest<?> request) {
-        if (shadow != null) {
-            try {
-                subscribeTopic(request.thingName(), request.shadowName(), request.shadowType());
+        boolean proceed = true;
 
-                if (request.shadowType() == ShadowRequestType.GET) {
-                    openRequests.put(request.token, request);
-                    shadow.PublishGetNamedShadow((GetNamedShadowRequest) request.getShadowRequest(),
-                            QualityOfService.AT_LEAST_ONCE).get();
-                } else if (request.shadowType() == ShadowRequestType.UPDATE) {
-                    openRequests.put(request.token, request);
-                    shadow.PublishUpdateNamedShadow((UpdateNamedShadowRequest) request.getShadowRequest(),
-                            QualityOfService.AT_LEAST_ONCE).get();
-                } else {
+        if (client == null) {
+            proceed = connect();
+        }
+
+        if (proceed) {
+            if (shadow != null) {
+                try {
+                    subscribeTopic(request.thingName(), request.shadowName(), request.shadowType());
+
+                    if (request.shadowType() == ShadowRequestType.GET) {
+                        openRequests.put(request.token, request);
+                        shadow.PublishGetNamedShadow((GetNamedShadowRequest) request.getShadowRequest(),
+                                QualityOfService.AT_LEAST_ONCE).get();
+                    } else if (request.shadowType() == ShadowRequestType.UPDATE) {
+                        openRequests.put(request.token, request);
+                        shadow.PublishUpdateNamedShadow((UpdateNamedShadowRequest) request.getShadowRequest(),
+                                QualityOfService.AT_LEAST_ONCE).get();
+                    } else {
+                        openRequests.remove(request.token);
+                        request.completeRequest("{\"reCode\": 402, \"reMsg\":\"unsupported mqtt requesttype\"}");
+                    }
+                } catch (InterruptedException | ExecutionException e) {
                     openRequests.remove(request.token);
-                    request.completeRequest("{\"reCode\": 402, \"reMsg\":\"unsupported mqtt requesttype\"}");
+                    request.completeRequest("{\"reCode\": 402, \"reMsg\":\"send request to mqtt failed for "
+                            + request.thingName() + " " + request.shadowName() + " " + e.getMessage() + "\"}");
+                    logger.error("failed to send mqtt request {}/{}: {}", request.thingName(), request.shadowName(),
+                            e.getMessage());
                 }
-            } catch (InterruptedException | ExecutionException e) {
+            } else {
                 openRequests.remove(request.token);
-                request.completeRequest("{\"reCode\": 402, \"reMsg\":\"send request to mqtt failed for "
-                        + request.thingName() + " " + request.shadowName() + " " + e.getMessage() + "\"}");
-                logger.error("failed to send mqtt request {}/{}: {}", request.thingName(), request.shadowName(),
-                        e.getMessage());
+                request.completeRequest("{\"reCode\": 402, \"reMsg\":\"send request failed as mqtt not connected for "
+                        + request.thingName() + " " + request.shadowName() + "\"}");
             }
         } else {
-            openRequests.remove(request.token);
-            request.completeRequest("{\"reCode\": 402, \"reMsg\":\"send request failed as mqtt not connected for "
-                    + request.thingName() + " " + request.shadowName() + "\"}");
+            logger.warn("connecting to mqtt failed");
         }
     }
 
     public boolean registerEventListener(Subscription subscription, EventListener listener) {
-        String topic = subscription.getTopic();
+        boolean proceed = true;
 
-        if (subscribe(topic)) {
-            ArrayList<EventListener> listeners = null;
-
-            if (updateListeners.containsKey(subscription)) {
-                listeners = updateListeners.get(subscription);
-            } else {
-                listeners = new ArrayList<>();
-            }
-
-            listeners.add(listener);
-            updateListeners.put(subscription, listeners);
-
-            logger.debug("registered listener {} for topic {}", ((BaseThingHandler) listener).getThing().getLabel(),
-                    topic);
-
-            return true;
+        if (client == null) {
+            proceed = connect();
         }
+
+        if (proceed) {
+            String topic = subscription.getTopic();
+
+            if (subscribe(topic)) {
+                ArrayList<EventListener> listeners = updateListeners.get(subscription);
+
+                if (updateListeners.containsKey(subscription)) {
+                    listeners = updateListeners.get(subscription);
+                } else {
+                    listeners = new ArrayList<>();
+                }
+
+                listeners.add(listener);
+                updateListeners.put(subscription, listeners);
+
+                logger.debug("registered listener {} for topic {}", ((BaseThingHandler) listener).getThing().getLabel(),
+                        topic);
+
+                return true;
+            }
+        } else {
+            logger.warn("connecting to mqtt failed");
+        }
+
         return false;
     }
 
     public void unregisterEventListener(EventListener listener) {
-        lock.lock();
         ArrayList<Subscription> keysToRemove = new ArrayList<>();
         updateListeners.keySet().forEach(subscription -> {
             ArrayList<EventListener> listeners = updateListeners.get(subscription);
@@ -240,12 +281,12 @@ public class Mqtt implements MqttClientConnectionEvents {
             unsubscribe(subscription.getTopic());
             updateListeners.remove(subscription);
         });
-        lock.unlock();
     }
 
     private boolean subscribeTopic(String thingName, String shadowName, ShadowRequestType type) {
         boolean success = false;
 
+        subscriptionLock.lock();
         try {
             if (shadow != null) {
                 if (!subscribedTopics.contains(thingName + shadowName + type)) {
@@ -289,21 +330,29 @@ public class Mqtt implements MqttClientConnectionEvents {
             logger.error("failed to subscribe to mqtt topic {}/{}", thingName, shadowName, e);
         }
 
+        subscriptionLock.unlock();
+
         return success;
     }
 
     private boolean unsubscribe(String topic) {
+        subscriptionLock.lock();
         try {
-            if (subscribedTopics.contains(topic)) {
-                CompletableFuture<Integer> unsubscribed = client.unsubscribe(topic);
-                unsubscribed.get();
-                subscribedTopics.remove(topic);
-                logger.debug("unsubscribed mqtt topic {}", topic);
+            if (client != null) {
+                if (subscribedTopics.contains(topic)) {
+                    CompletableFuture<Integer> unsubscribed = client.unsubscribe(topic);
+                    unsubscribed.get();
+                    subscribedTopics.remove(topic);
+                    logger.debug("unsubscribed mqtt topic {}", topic);
+                }
+
                 return true;
             }
         } catch (InterruptedException | ExecutionException e) {
             logger.error("failed to unsubscribe to mqtt topic {}", topic, e);
         }
+
+        subscriptionLock.unlock();
 
         return false;
     }
@@ -311,21 +360,23 @@ public class Mqtt implements MqttClientConnectionEvents {
     private boolean subscribe(String topic) {
         boolean success = false;
 
+        subscriptionLock.lock();
         try {
-            lock.lock();
-            if (!subscribedTopics.contains(topic)) {
-                CompletableFuture<Integer> subscribed = client.subscribe(topic, QualityOfService.AT_LEAST_ONCE,
-                        this::onMqttMessageReceived);
-                subscribed.get();
-                subscribedTopics.add(topic);
-                logger.debug("subscribed to mqtt topic {}", topic);
+            if (client != null) {
+                if (!subscribedTopics.contains(topic)) {
+                    CompletableFuture<Integer> subscribed = client.subscribe(topic, QualityOfService.AT_LEAST_ONCE,
+                            this::onMqttMessageReceived);
+                    subscribed.get();
+                    subscribedTopics.add(topic);
+                    logger.debug("subscribed to mqtt topic {}", topic);
+                }
+                success = true;
             }
-            success = true;
         } catch (InterruptedException | ExecutionException e) {
             logger.error("failed to subscribe to mqtt topic {}", topic, e);
-        } finally {
-            lock.unlock();
         }
+
+        subscriptionLock.unlock();
 
         return success;
     }
@@ -360,14 +411,6 @@ public class Mqtt implements MqttClientConnectionEvents {
     public void onConnectionSuccess(OnConnectionSuccessReturn data) {
         shadow = new IotShadowClient(client);
         logger.debug("connect to mqtt successful for region {}", region);
-
-        CompletableFuture.runAsync(() -> {
-            updateListeners.values().forEach(listeners -> {
-                ((ArrayList<EventListener>) listeners).forEach(listener -> {
-                    ((EventListener) listener).updateEventConnectionStatus(false);
-                });
-            });
-        });
     }
 
     @Override
@@ -393,14 +436,6 @@ public class Mqtt implements MqttClientConnectionEvents {
                 request.completeRequest("{\"reCode\": 402, \"reMsg\":\"mqtt interrupted\"}");
             });
             openRequests.clear();
-
-            CompletableFuture.runAsync(() -> {
-                updateListeners.values().forEach(listeners -> {
-                    ((ArrayList<EventListener>) listeners).forEach(listener -> {
-                        ((EventListener) listener).updateEventConnectionStatus(true);
-                    });
-                });
-            });
         }
     }
 
